@@ -1,0 +1,36 @@
+# Build outputs
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+dist/
+build/
+
+# Local databases & uploads
+*.db
+*.db-shm
+*.db-wal
+App_Data/
+evidence_storage/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE & OS
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Environment files
+.env
+.env.local
+.env.*.local
