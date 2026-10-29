@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { 
   AlertCircle, RefreshCw, LayoutDashboard, 
-  Search, Box, Cpu, History, Clock, FileCheck 
+  Search, Box, Cpu, History, Clock, ShieldCheck 
 } from 'lucide-react';
 import type { ReportDetail } from '../types/report';
 import { fetchReport } from '../services/api';
@@ -14,6 +14,7 @@ import { TimelineSection } from '../components/ReportViewer/TimelineSection';
 import { DiagnosticsSection } from '../components/ReportViewer/DiagnosticsSection';
 import { DeleteModal } from '../components/ReportViewer/DeleteModal';
 import { ExportModal } from '../components/ReportViewer/ExportModal';
+import { RawDataModal } from '../components/ReportViewer/RawDataModal';
 
 interface ReportPageProps {
   publicId: string;
@@ -28,8 +29,10 @@ export const ReportPage: React.FC<ReportPageProps> = ({ publicId, onNavigateHome
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [selectedFindingId, setSelectedFindingId] = useState<string | undefined>(undefined);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isRawModalOpen, setIsRawModalOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -61,7 +64,7 @@ export const ReportPage: React.FC<ReportPageProps> = ({ publicId, onNavigateHome
         <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
           <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin" />
           <div className="text-sm font-semibold text-slate-300">Loading Forensic Report {publicId}...</div>
-          <p className="text-xs text-slate-500">Querying structured evidence records and verification logs.</p>
+          <p className="text-xs text-slate-500">Querying structured evidence records, verification logs, and integrity hashes.</p>
         </div>
       </div>
     );
@@ -95,30 +98,35 @@ export const ReportPage: React.FC<ReportPageProps> = ({ publicId, onNavigateHome
     );
   }
 
+  const handleSelectFinding = (ruleId: string) => {
+    setSelectedFindingId(ruleId);
+    setActiveTab('findings');
+  };
+
   const tabs: { id: TabType; label: string; icon: React.ReactNode; count?: number }[] = [
-    { id: 'overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
-    { id: 'findings', label: 'Findings', icon: <Search className="w-4 h-4" />, count: report.findings.length },
-    { id: 'minecraft', label: 'Minecraft Env', icon: <Box className="w-4 h-4" /> },
-    { id: 'process', label: 'Process & Runtime', icon: <Cpu className="w-4 h-4" /> },
-    { id: 'historical', label: 'Historical Artifacts', icon: <History className="w-4 h-4" />, count: report.evidenceItems.length },
-    { id: 'timeline', label: 'Timeline', icon: <Clock className="w-4 h-4" />, count: report.timelineEvents.length },
-    { id: 'diagnostics', label: 'Diagnostics', icon: <FileCheck className="w-4 h-4" />, count: report.diagnosticItems.length },
+    { id: 'overview', label: 'Overview & Verdict', icon: <LayoutDashboard className="w-4 h-4" /> },
+    { id: 'findings', label: 'Findings Explorer', icon: <Search className="w-4 h-4" />, count: report.findings.length },
+    { id: 'historical', label: 'Historical & Deleted Artifacts', icon: <History className="w-4 h-4" />, count: report.evidenceItems.length },
+    { id: 'minecraft', label: 'Minecraft Env & Mods', icon: <Box className="w-4 h-4" /> },
+    { id: 'process', label: 'Process Runtime & Memory', icon: <Cpu className="w-4 h-4" /> },
+    { id: 'timeline', label: 'Chronological Timeline', icon: <Clock className="w-4 h-4" />, count: report.timelineEvents.length },
+    { id: 'diagnostics', label: 'Diagnostics & Coverage', icon: <ShieldCheck className="w-4 h-4" />, count: report.diagnosticItems.length },
   ];
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Navigation Tabs Bar */}
       <div className="border-b border-slate-800 no-print">
-        <nav className="flex space-x-2 sm:space-x-4 overflow-x-auto pb-1 text-xs">
+        <nav className="flex space-x-1 sm:space-x-2 overflow-x-auto pb-1 text-xs">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 py-3 px-3 border-b-2 font-medium whitespace-nowrap transition ${
+                className={`flex items-center gap-2 py-3 px-3.5 border-b-2 font-medium whitespace-nowrap transition ${
                   isActive
-                    ? 'border-emerald-400 text-emerald-400 bg-slate-900/50 rounded-t-lg'
+                    ? 'border-emerald-400 text-emerald-400 bg-slate-900/60 rounded-t-lg font-semibold'
                     : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
                 }`}
               >
@@ -126,7 +134,7 @@ export const ReportPage: React.FC<ReportPageProps> = ({ publicId, onNavigateHome
                 <span>{tab.label}</span>
                 {tab.count !== undefined && (
                   <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-mono ${
-                    isActive ? 'bg-emerald-950 text-emerald-300' : 'bg-slate-800 text-slate-400'
+                    isActive ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-slate-800 text-slate-400'
                   }`}>
                     {tab.count}
                   </span>
@@ -144,11 +152,20 @@ export const ReportPage: React.FC<ReportPageProps> = ({ publicId, onNavigateHome
             report={report}
             onOpenDeleteModal={() => setIsDeleteModalOpen(true)}
             onExportJson={() => setIsExportModalOpen(true)}
+            onSelectFinding={handleSelectFinding}
+            onInspectRawJson={() => setIsRawModalOpen(true)}
           />
         )}
 
         {activeTab === 'findings' && (
-          <FindingsSection findings={report.findings} />
+          <FindingsSection 
+            findings={report.findings} 
+            initialExpandedRuleId={selectedFindingId}
+          />
+        )}
+
+        {activeTab === 'historical' && (
+          <HistoricalEvidenceSection report={report} />
         )}
 
         {activeTab === 'minecraft' && (
@@ -157,10 +174,6 @@ export const ReportPage: React.FC<ReportPageProps> = ({ publicId, onNavigateHome
 
         {activeTab === 'process' && (
           <ProcessRuntimeSection report={report} />
-        )}
-
-        {activeTab === 'historical' && (
-          <HistoricalEvidenceSection report={report} />
         )}
 
         {activeTab === 'timeline' && (
@@ -188,6 +201,12 @@ export const ReportPage: React.FC<ReportPageProps> = ({ publicId, onNavigateHome
         report={report}
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
+      />
+
+      <RawDataModal
+        report={report}
+        isOpen={isRawModalOpen}
+        onClose={() => setIsRawModalOpen(false)}
       />
     </div>
   );
