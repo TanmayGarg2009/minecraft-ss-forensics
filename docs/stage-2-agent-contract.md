@@ -128,3 +128,19 @@ HTTP/1.1 200 OK
 3. **No Executable Code**: Do not submit binary executable files in base64. Use text dumps or structured JSON attributes.
 4. **Hashes**: All computed hashes should be lowercase 64-character SHA-256 strings.
 5. **Caveats Mandatory**: Every finding must include `limitationsAndFalsePositives` so server staff are never misled.
+
+---
+
+## 8. Reference Implementation (Stage 2 Completed)
+
+The reference implementation for Stage 2 is provided in the repository:
+- `backend/src/MinecraftSsForensics.Scanner`: Core testable scanner library containing:
+  - `StreamingFileHasher`: SHA-256, SHA-512, Murmur2 with mutation detection.
+  - `SafeArchiveInspector`: Zip-bomb and traversal-safe JAR metadata parser (`fabric.mod.json`, `mods.toml`, `quilt.mod.json`, `MANIFEST.MF`).
+  - `CompositeModVerifier`: Provider chain (Modrinth, CurseForge, GitHub) with 9 verification states and TTL caching.
+  - `LookalikeDetector`: Anomaly detection for disguised mods, mismatched metadata, duplicate mod IDs, and agent hooks.
+  - `ProcessScanner` & `CommandLineRedactor`: Scoped `javaw.exe` / `java.exe` process auditing with credential redaction.
+  - `HistoricalEvidenceScanner`: Read-only Prefetch, BAM/DAM, and Temp artifact inspection with transparent user-mode limitation diagnostics.
+  - `BackendApiClient`: Typed client for report submission and instant player-controlled deletion.
+- `backend/src/MinecraftSsForensics.Scanner.App`: Native Windows WPF desktop application providing a 5-panel state machine (Consent & Scope Disclosure -> Progress & Cancellation -> Pre-upload Review -> Submission -> Shareable URL & Deletion Key Result).
+- `backend/tests/MinecraftSsForensics.Scanner.Tests`: 24 unit and end-to-end integration tests verifying every component and the full submission lifecycle.

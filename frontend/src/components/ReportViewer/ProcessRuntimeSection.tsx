@@ -18,7 +18,8 @@ export const ProcessRuntimeSection: React.FC<ProcessRuntimeSectionProps> = ({ re
   const rawModuleText = loadedModulesEvidence?.rawContent || '';
   const parsedModules = rawModuleText
     .split('\n')
-    .filter(l => l.trim().length > 0 && !l.startsWith('['))
+    .map(l => l.trim())
+    .filter(l => l.length > 0 && !l.startsWith('#') && !l.startsWith('//'))
     .map(line => {
       const isUnsigned = line.toLowerCase().includes('unsigned') || line.toLowerCase().includes('temp');
       return {
