@@ -29,12 +29,49 @@ export type EvidenceType =
   | 'MinecraftLog'
   | 'LauncherLog'
   | 'ModInventory'
+  | 'ModPolicyAudit'
   | 'JvmArguments'
   | 'LoadedModules'
   | 'FileMetadata'
   | 'WindowsArtifact'
   | 'CorrelationResult'
   | 'DiagnosticFailure';
+
+export type GameplayPolicy = 'ALLOWED' | 'PROHIBITED' | 'RESTRICTED' | 'NEEDS_REVIEW' | 'UNKNOWN';
+
+export interface ModInventoryItem {
+  name: string;
+  fileName: string;
+  sizeBytes?: number;
+  fileSizeBytes?: number;
+  sha256: string;
+  sha512?: string;
+  modId?: string;
+  modName?: string;
+  version?: string;
+  loader?: string;
+  // Authenticity
+  verified: boolean;
+  verificationState: string;
+  verificationProvider?: string;
+  verificationExplanation?: string;
+  projectUrl?: string;
+  // Gameplay Policy (Independent from authenticity)
+  gameplayPolicy?: GameplayPolicy | string;
+  policy?: GameplayPolicy | string;
+  behaviorCategory?: string;
+  policyConfidence?: string;
+  policyReason?: string;
+  policyExplanation?: string;
+  policyLimitations?: string;
+  restrictionConditions?: string;
+  hasConflictingSignals?: boolean;
+  conflictDetails?: string;
+  appliedPolicyName?: string;
+  appliedGamemode?: string;
+  appliedPolicyVersion?: string;
+  suspiciousNotes?: string[];
+}
 
 export interface ConsentDetail {
   consentGiven: boolean;
@@ -119,6 +156,10 @@ export interface ReportDetail {
   osArchitecture: string;
   detectedMinecraftVersions: string[];
   detectedLoaders: string[];
+  appliedPolicyName?: string;
+  appliedPolicyVersion?: string;
+  appliedGamemode?: string;
+  appliedPolicyRulesUrl?: string;
   consent: ConsentDetail;
   processingStatus: ProcessingStatus | string;
   expiresAt: string;

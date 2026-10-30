@@ -60,6 +60,7 @@ public enum EvidenceType
     MinecraftLog,
     LauncherLog,
     ModInventory,
+    ModPolicyAudit,
     JvmArguments,
     LoadedModules,
     FileMetadata,

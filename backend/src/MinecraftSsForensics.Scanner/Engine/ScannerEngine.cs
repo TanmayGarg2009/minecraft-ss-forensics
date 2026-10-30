@@ -5,6 +5,7 @@ using MinecraftSsForensics.Scanner.Archive;
 using MinecraftSsForensics.Scanner.Hashing;
 using MinecraftSsForensics.Scanner.LogsAndHistory;
 using MinecraftSsForensics.Scanner.Lookalike;
+using MinecraftSsForensics.Scanner.Policy;
 using MinecraftSsForensics.Scanner.Process;
 using MinecraftSsForensics.Scanner.Verification;
 
@@ -17,6 +18,7 @@ public interface IScannerEngine
         string? customDirectory = null,
         bool onlyCustomDirectory = false,
         IProgress<ScanProgressUpdate>? progress = null,
+        ServerGamemodePolicy? policy = null,
         CancellationToken ct = default);
 }
 
@@ -30,6 +32,7 @@ public class ScannerEngine : IScannerEngine
     private readonly InstallationLocator _installationLocator;
     private readonly LogAuditor _logAuditor;
     private readonly HistoricalEvidenceScanner _historicalScanner;
+    private readonly ModPolicyEngine _policyEngine;
 
     public ScannerEngine(
         IFileHasher? hasher = null,
@@ -39,7 +42,8 @@ public class ScannerEngine : IScannerEngine
         IProcessScanner? processScanner = null,
         InstallationLocator? installationLocator = null,
         LogAuditor? logAuditor = null,
-        HistoricalEvidenceScanner? historicalScanner = null)
+        HistoricalEvidenceScanner? historicalScanner = null,
+        ModPolicyEngine? policyEngine = null)
     {
         _hasher = hasher ?? new StreamingFileHasher();
         _archiveInspector = archiveInspector ?? new SafeArchiveInspector();
@@ -48,6 +52,7 @@ public class ScannerEngine : IScannerEngine
         _installationLocator = installationLocator ?? new InstallationLocator();
         _logAuditor = logAuditor ?? new LogAuditor();
         _historicalScanner = historicalScanner ?? new HistoricalEvidenceScanner();
+        _policyEngine = policyEngine ?? new ModPolicyEngine();
 
         if (verifier == null)
         {
@@ -68,11 +73,14 @@ public class ScannerEngine : IScannerEngine
         string? customDirectory = null,
         bool onlyCustomDirectory = false,
         IProgress<ScanProgressUpdate>? progress = null,
+        ServerGamemodePolicy? policy = null,
         CancellationToken ct = default)
     {
         DateTimeOffset scanStart = DateTimeOffset.UtcNow;
         var update = new ScanProgressUpdate { PercentComplete = 5, CurrentCategory = "Initialization" };
         progress?.Report(update);
+
+        var activePolicy = policy ?? _policyEngine.Registry.GetPolicy("Crystal PvP");
 
         var report = new SubmitReportRequest
         {
@@ -83,6 +91,10 @@ public class ScannerEngine : IScannerEngine
             OsVersion = Environment.OSVersion.Version.ToString(),
             OsArchitecture = RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant(),
             ScanStartedAt = scanStart,
+            AppliedPolicyName = activePolicy.PolicyName,
+            AppliedPolicyVersion = activePolicy.PolicyVersion,
+            AppliedGamemode = activePolicy.Gamemode,
+            AppliedPolicyRulesUrl = activePolicy.ServerRulesUrl,
             ConsentConfirmation = new ConsentSubmissionDto
             {
                 ConsentGiven = true,
@@ -164,6 +176,7 @@ public class ScannerEngine : IScannerEngine
 
         var discoveredMods = new List<DiscoveredMod>();
         var modsWithVerification = new List<(DiscoveredMod Mod, ModVerificationResult Verification)>();
+        var modsWithEvaluation = new List<(DiscoveredMod Mod, ModVerificationResult Verification, ModPolicyEvaluationResult PolicyResult)>();
 
         for (int i = 0; i < discoveredModFiles.Count; i++)
         {
@@ -241,7 +254,9 @@ public class ScannerEngine : IScannerEngine
                 flaggedChecks++;
             }
 
+            var policyResult = _policyEngine.EvaluateMod(modItem, verResult, activePolicy);
             modsWithVerification.Add((modItem, verResult));
+            modsWithEvaluation.Add((modItem, verResult, policyResult));
         }
 
         // Add Mod Inventory Evidence item
@@ -251,7 +266,7 @@ public class ScannerEngine : IScannerEngine
             Type = "ModInventory",
             Title = "Discovered Mod Inventory & Cryptographic Hashes",
             Description = $"Inventory of {discoveredMods.Count} mod archive(s) inspected across active installations.",
-            StructuredPayload = modsWithVerification.Select(mv => new
+            StructuredPayload = modsWithEvaluation.Select(mv => new
             {
                 Name = !string.IsNullOrEmpty(mv.Mod.Metadata.ModName) ? mv.Mod.Metadata.ModName : mv.Mod.FileName,
                 mv.Mod.FileName,
@@ -263,13 +278,56 @@ public class ScannerEngine : IScannerEngine
                 ModName = mv.Mod.Metadata.ModName,
                 Version = mv.Mod.Metadata.Version,
                 Loader = mv.Mod.Metadata.Loader,
+                // Authenticity
                 Verified = mv.Verification.State == ModVerificationState.VERIFIED_EXACT_RELEASE,
                 VerificationState = mv.Verification.State.ToString(),
                 VerificationProvider = mv.Verification.Provider,
                 VerificationExplanation = mv.Verification.Explanation,
                 ProjectUrl = mv.Verification.ProjectUrl,
+                // Gameplay Policy (Independent from authenticity)
+                GameplayPolicy = mv.PolicyResult.Policy.ToString(),
+                Policy = mv.PolicyResult.Policy.ToString(),
+                BehaviorCategory = mv.PolicyResult.Behavior.ToString(),
+                PolicyConfidence = mv.PolicyResult.Confidence,
+                PolicyReason = mv.PolicyResult.Reason,
+                PolicyExplanation = mv.PolicyResult.Explanation,
+                PolicyLimitations = mv.PolicyResult.LimitationsAndUncertainty,
+                RestrictionConditions = mv.PolicyResult.RestrictionConditions,
+                HasConflictingSignals = mv.PolicyResult.HasConflictingSignals,
+                ConflictDetails = mv.PolicyResult.ConflictDetails,
+                AppliedPolicyName = activePolicy.PolicyName,
+                AppliedGamemode = activePolicy.Gamemode,
+                AppliedPolicyVersion = activePolicy.PolicyVersion,
                 mv.Mod.Metadata.SuspiciousNotes
             }).ToList(),
+            CapturedAt = DateTimeOffset.UtcNow,
+            IsAvailable = true
+        });
+
+        // Add Mod Policy Audit Evidence item
+        report.EvidenceItems.Add(new EvidenceSubmissionDto
+        {
+            PublicEvidenceId = "evi_mod_policy_01",
+            Type = "ModPolicyAudit",
+            Title = $"Mod Gameplay Policy Audit ({activePolicy.Gamemode})",
+            Description = $"Evaluation of {discoveredMods.Count} mod(s) under '{activePolicy.PolicyName}' (v{activePolicy.PolicyVersion}, effective {activePolicy.EffectiveDate}).",
+            StructuredPayload = new
+            {
+                PolicyId = activePolicy.PolicyId,
+                PolicyName = activePolicy.PolicyName,
+                Gamemode = activePolicy.Gamemode,
+                PolicyVersion = activePolicy.PolicyVersion,
+                EffectiveDate = activePolicy.EffectiveDate,
+                ServerRulesUrl = activePolicy.ServerRulesUrl,
+                Description = activePolicy.Description,
+                TotalMods = modsWithEvaluation.Count,
+                AllowedCount = modsWithEvaluation.Count(m => m.PolicyResult.Policy == GameplayPolicy.ALLOWED),
+                ProhibitedCount = modsWithEvaluation.Count(m => m.PolicyResult.Policy == GameplayPolicy.PROHIBITED),
+                RestrictedCount = modsWithEvaluation.Count(m => m.PolicyResult.Policy == GameplayPolicy.RESTRICTED),
+                NeedsReviewCount = modsWithEvaluation.Count(m => m.PolicyResult.Policy == GameplayPolicy.NEEDS_REVIEW),
+                UnknownCount = modsWithEvaluation.Count(m => m.PolicyResult.Policy == GameplayPolicy.UNKNOWN),
+                ConflictingSignalsCount = modsWithEvaluation.Count(m => m.PolicyResult.HasConflictingSignals)
+            },
             CapturedAt = DateTimeOffset.UtcNow,
             IsAvailable = true
         });
@@ -356,6 +414,94 @@ public class ScannerEngine : IScannerEngine
                     EvidenceSource = EvidenceSource.ModFolder.ToString(),
                     DetectionRuleVersion = "1.0.0",
                     LimitationsAndFalsePositives = ver.Limitations
+                });
+            }
+        }
+
+        // Add Policy findings (prohibited mods, conflicting identity signals, restricted mods)
+        foreach (var (mod, ver, pol) in modsWithEvaluation)
+        {
+            if (pol.Policy == GameplayPolicy.PROHIBITED)
+            {
+                flaggedChecks++;
+                report.Findings.Add(new FindingSubmissionDto
+                {
+                    RuleId = "POLICY-PROHIBITED-MOD",
+                    Title = $"Prohibited Mod Under {activePolicy.Gamemode} Rules: {mod.FileName}",
+                    Category = FindingCategory.ModIntegrity.ToString(),
+                    Severity = Severity.High.ToString(),
+                    Confidence = pol.Confidence,
+                    Explanation = pol.Explanation,
+                    ObservedEvidence = new
+                    {
+                        ModName = pol.ModName,
+                        BehaviorCategory = pol.Behavior.ToString(),
+                        AppliedGamemode = activePolicy.Gamemode,
+                        AppliedPolicy = activePolicy.PolicyName,
+                        PolicyVersion = activePolicy.PolicyVersion,
+                        MatchedRuleId = pol.MatchedRuleId,
+                        Authenticity = ver.State.ToString(),
+                        RulesUrl = activePolicy.ServerRulesUrl
+                    },
+                    FilePath = mod.FilePath,
+                    FileSha256 = mod.Hashes.Sha256,
+                    FileSizeBytes = mod.FileSizeBytes,
+                    EvidenceSource = EvidenceSource.ModFolder.ToString(),
+                    DetectionRuleVersion = activePolicy.PolicyVersion,
+                    LimitationsAndFalsePositives = pol.LimitationsAndUncertainty
+                });
+            }
+            else if (pol.HasConflictingSignals)
+            {
+                flaggedChecks++;
+                report.Findings.Add(new FindingSubmissionDto
+                {
+                    RuleId = "POLICY-CONFLICTING-SIGNALS",
+                    Title = $"Conflicting Identity & Policy Signals: {mod.FileName}",
+                    Category = FindingCategory.ModIntegrity.ToString(),
+                    Severity = Severity.High.ToString(),
+                    Confidence = ConfidenceLevel.High.ToString(),
+                    Explanation = pol.ConflictDetails ?? "Discrepancy detected between mod file name, manifest, and cryptographic hash.",
+                    ObservedEvidence = new
+                    {
+                        FileName = mod.FileName,
+                        DeclaredModId = mod.Metadata?.ModId,
+                        Sha256 = mod.Hashes.Sha256,
+                        MatchedRuleId = pol.MatchedRuleId,
+                        ConflictDetails = pol.ConflictDetails
+                    },
+                    FilePath = mod.FilePath,
+                    FileSha256 = mod.Hashes.Sha256,
+                    FileSizeBytes = mod.FileSizeBytes,
+                    EvidenceSource = EvidenceSource.ModFolder.ToString(),
+                    DetectionRuleVersion = "1.0.0",
+                    LimitationsAndFalsePositives = "Player may have renamed the archive for alphabetical organization; manual review recommended."
+                });
+            }
+            else if (pol.Policy == GameplayPolicy.RESTRICTED)
+            {
+                flaggedChecks++;
+                report.Findings.Add(new FindingSubmissionDto
+                {
+                    RuleId = "POLICY-RESTRICTED-MOD",
+                    Title = $"Restricted Mod Requiring Configuration Audit: {mod.FileName}",
+                    Category = FindingCategory.ModIntegrity.ToString(),
+                    Severity = Severity.Medium.ToString(),
+                    Confidence = pol.Confidence,
+                    Explanation = pol.Explanation,
+                    ObservedEvidence = new
+                    {
+                        ModName = pol.ModName,
+                        BehaviorCategory = pol.Behavior.ToString(),
+                        Conditions = pol.RestrictionConditions,
+                        RulesUrl = activePolicy.ServerRulesUrl
+                    },
+                    FilePath = mod.FilePath,
+                    FileSha256 = mod.Hashes.Sha256,
+                    FileSizeBytes = mod.FileSizeBytes,
+                    EvidenceSource = EvidenceSource.ModFolder.ToString(),
+                    DetectionRuleVersion = activePolicy.PolicyVersion,
+                    LimitationsAndFalsePositives = pol.LimitationsAndUncertainty
                 });
             }
         }

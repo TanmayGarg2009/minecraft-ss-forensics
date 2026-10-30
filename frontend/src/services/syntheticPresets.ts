@@ -21,6 +21,10 @@ export const SYNTHETIC_PRESETS: SyntheticPreset[] = [
       scanCompletedAt: new Date().toISOString(),
       detectedMinecraftVersions: ["1.8.9"],
       detectedLoaders: ["Forge 11.15.1.2318", "OptiFine_1.8.9_HD_U_M5"],
+      appliedPolicyName: "Crystal PvP Standard Competition Policy",
+      appliedPolicyVersion: "1.2.0",
+      appliedGamemode: "Crystal PvP",
+      appliedPolicyRulesUrl: "https://rules.example-pvp.net/crystal-pvp",
       consentConfirmation: {
         consentGiven: true,
         collectionScopeVersion: "1.0",
@@ -41,9 +45,9 @@ export const SYNTHETIC_PRESETS: SyntheticPreset[] = [
           title: "Mods Folder Inventory",
           description: "All JAR files located in .minecraft/mods with valid signatures and hashes.",
           structuredPayload: [
-            { name: "OptiFine_1.8.9_HD_U_M5.jar", sizeBytes: 2451000, sha256: "9f83c2e1d4b6a8e7f0123456789abcdef0123456789abcdef0123456789abcde", verified: true },
-            { name: "Essential-loader-1.8.9.jar", sizeBytes: 154020, sha256: "3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0123456789abcdef0123456789abcd", verified: true },
-            { name: "KeystrokesMod-v5.jar", sizeBytes: 312000, sha256: "7a8b9c0d1e2f3a4b5c6d7e8f90123456789abcdef0123456789abcdef0123456", verified: true }
+            { name: "OptiFine_1.8.9_HD_U_M5.jar", sizeBytes: 2451000, sha256: "9f83c2e1d4b6a8e7f0123456789abcdef0123456789abcdef0123456789abcde", verified: true, verificationState: "VERIFIED_EXACT_RELEASE", gameplayPolicy: "ALLOWED", behaviorCategory: "ClientOptimization", policyReason: "Standard rendering optimization allowed in Crystal PvP." },
+            { name: "Essential-loader-1.8.9.jar", sizeBytes: 154020, sha256: "3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0123456789abcdef0123456789abcd", verified: true, verificationState: "VERIFIED_EXACT_RELEASE", gameplayPolicy: "ALLOWED", behaviorCategory: "CosmeticOrHud", policyReason: "Cosmetic and wardrobe loader." },
+            { name: "KeystrokesMod-v5.jar", sizeBytes: 312000, sha256: "7a8b9c0d1e2f3a4b5c6d7e8f90123456789abcdef0123456789abcdef0123456", verified: true, verificationState: "VERIFIED_EXACT_RELEASE", gameplayPolicy: "ALLOWED", behaviorCategory: "CosmeticOrHud", policyReason: "HUD keystrokes display is permitted." }
           ],
           isAvailable: true
         },

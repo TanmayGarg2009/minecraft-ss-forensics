@@ -18,6 +18,11 @@ public class ReportDetailResponse
     public List<string> DetectedMinecraftVersions { get; set; } = new();
     public List<string> DetectedLoaders { get; set; } = new();
 
+    public string? AppliedPolicyName { get; set; }
+    public string? AppliedPolicyVersion { get; set; }
+    public string? AppliedGamemode { get; set; }
+    public string? AppliedPolicyRulesUrl { get; set; }
+
     public ConsentDetailDto Consent { get; set; } = new();
     public string ProcessingStatus { get; set; } = "Completed";
     public DateTimeOffset ExpiresAt { get; set; }

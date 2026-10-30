@@ -119,6 +119,34 @@ export function formatFindingForPresentation(finding: FindingDetail): FindingPre
     whatItDoesNotEstablish = 'Does not mean the player tried to hide anything; standard Windows user accounts cannot read Prefetch by design.';
     possibleLegitimateExplanations.push('Player ran the scanner without Administrator elevation as standard procedure.');
   }
+  // 9. Prohibited Mod Under Active Policy
+  else if (ruleId.includes('POLICY-PROHIBITED') || title.toLowerCase().includes('prohibited mod')) {
+    simpleTitle = 'Prohibited Mod Under Server Rules';
+    simpleExplanation = 'This mod is disallowed under the active server/gamemode rules due to competitive gameplay advantage.';
+    whatWasObserved = explanation || 'Discovered mod matches a prohibited rule under the active server policy.';
+    whyItMatters = 'Competitive rules prohibit features like camera detachment (Freecam), automated placement, or radar to preserve fair competition.';
+    whatItDoesNotEstablish = 'Crucial distinction: Does NOT prove the file is malware or a modified cheat client. It may be an unmodified official release that is simply banned under this specific gamemode.';
+    possibleLegitimateExplanations.push('The player installed the mod for singleplayer building or for playing on a different server.');
+    possibleLegitimateExplanations.push('The mod was bundled in a general-purpose community modpack.');
+  }
+  // 10. Conflicting Identity & Policy Signals
+  else if (ruleId.includes('POLICY-CONFLICTING') || title.toLowerCase().includes('conflicting identity')) {
+    simpleTitle = 'Mod Policy Identity Conflict';
+    simpleExplanation = 'The mod\'s file name, internal manifest, and cryptographic hash contradict each other.';
+    whatWasObserved = explanation || 'File name mimics an allowed mod, but internal bytecode or hash identifies it differently.';
+    whyItMatters = 'Renaming cheat or prohibited archives to mimic standard optimization mods (such as Sodium) is a common evasion technique.';
+    whatItDoesNotEstablish = 'Does not prove malicious intent; players sometimes rename files for alphabetical sorting in their launcher.';
+    possibleLegitimateExplanations.push('The player renamed a utility mod for alphabetical organization in their launcher.');
+  }
+  // 11. Restricted Mod
+  else if (ruleId.includes('POLICY-RESTRICTED') || title.toLowerCase().includes('restricted mod')) {
+    simpleTitle = 'Restricted Mod Configuration';
+    simpleExplanation = 'This mod is permitted only if specific features or settings are disabled.';
+    whatWasObserved = explanation || 'Mod is permitted under conditions, but requires staff configuration audit.';
+    whyItMatters = 'Certain mods have dual utility (e.g. schematic holograms) but include restricted features (e.g. easy-place automation or radar).';
+    whatItDoesNotEstablish = 'Does not prove the restricted features were used during the match.';
+    possibleLegitimateExplanations.push('Player uses the mod exclusively for schematic guidance or client performance.');
+  }
 
   // Populate reference details if observed
   let referenceDetails: FindingPresentation['referenceDetails'] = undefined;
@@ -163,6 +191,12 @@ export interface ReportOverviewMetrics {
   duplicateFilesCount: number;
   scanErrorsOrUnavailableCount: number;
   summaryExplanation: string;
+  prohibitedModsCount: number;
+  restrictedModsCount: number;
+  allowedModsCount: number;
+  policyReviewCount: number;
+  appliedGamemode: string;
+  appliedPolicyName: string;
 }
 
 /**
@@ -183,6 +217,10 @@ export function extractReportOverviewMetrics(report: ReportDetail): ReportOvervi
 
   let verifiedModsCount = 0;
   let unverifiedOrModifiedCount = 0;
+  let prohibitedModsCount = 0;
+  let restrictedModsCount = 0;
+  let allowedModsCount = 0;
+  let policyReviewCount = 0;
 
   mods.forEach(m => {
     const isVerified = m.verified === true || m.verificationState === 'VERIFIED_EXACT_RELEASE';
@@ -191,7 +229,21 @@ export function extractReportOverviewMetrics(report: ReportDetail): ReportOvervi
     } else {
       unverifiedOrModifiedCount++;
     }
+
+    const policy = (m.gameplayPolicy || m.policy || '').toUpperCase();
+    if (policy === 'PROHIBITED') prohibitedModsCount++;
+    else if (policy === 'RESTRICTED') restrictedModsCount++;
+    else if (policy === 'ALLOWED') allowedModsCount++;
+    else if (policy === 'NEEDS_REVIEW' || policy === 'UNKNOWN') policyReviewCount++;
   });
+
+  // If mod inventory evidence didn't explicitly have policy, deduce from findings
+  if (prohibitedModsCount === 0) {
+    prohibitedModsCount = findings.filter(f => f.ruleId?.includes('POLICY-PROHIBITED') || f.title?.toLowerCase().includes('prohibited mod')).length;
+  }
+  if (restrictedModsCount === 0) {
+    restrictedModsCount = findings.filter(f => f.ruleId?.includes('POLICY-RESTRICTED') || f.title?.toLowerCase().includes('restricted mod')).length;
+  }
 
   // If mod inventory wasn't in evidence payload, deduce from findings
   if (mods.length === 0) {
@@ -253,6 +305,12 @@ export function extractReportOverviewMetrics(report: ReportDetail): ReportOvervi
     unverifiedOrModifiedCount,
     duplicateFilesCount,
     scanErrorsOrUnavailableCount,
-    summaryExplanation
+    summaryExplanation,
+    prohibitedModsCount,
+    restrictedModsCount,
+    allowedModsCount,
+    policyReviewCount,
+    appliedGamemode: report.appliedGamemode || 'Standard PvP',
+    appliedPolicyName: report.appliedPolicyName || 'Default Policy'
   };
 }

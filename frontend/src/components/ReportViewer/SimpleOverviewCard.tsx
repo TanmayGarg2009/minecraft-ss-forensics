@@ -71,6 +71,9 @@ export const SimpleOverviewCard: React.FC<SimpleOverviewCardProps> = ({
           <span className="px-2.5 py-0.5 rounded text-xs font-semibold uppercase tracking-wider bg-slate-800 text-slate-300 border border-slate-700">
             Mode: {report.scanMode}
           </span>
+          <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-indigo-950 text-indigo-300 border border-indigo-800">
+            Ruleset: {metrics.appliedGamemode} {report.appliedPolicyVersion ? `v${report.appliedPolicyVersion}` : ''}
+          </span>
           <span className="px-2.5 py-0.5 rounded text-xs font-mono bg-slate-950 text-slate-300 border border-slate-800">
             Report ID: {report.publicId}
           </span>
@@ -147,7 +150,7 @@ export const SimpleOverviewCard: React.FC<SimpleOverviewCardProps> = ({
         </div>
 
         {/* 3. Seven High-Level Metrics Summary Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 pt-2 border-t border-slate-800/80">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5 pt-2 border-t border-slate-800/80">
           {/* 1. Findings Requiring Review */}
           <button
             onClick={onJumpToFindings}
@@ -159,7 +162,21 @@ export const SimpleOverviewCard: React.FC<SimpleOverviewCardProps> = ({
             </span>
           </button>
 
-          {/* 2. Verified Mods */}
+          {/* 2. Policy Prohibited / Restricted */}
+          <div className="p-3 rounded-lg bg-slate-900/90 border border-slate-800">
+            <span className="text-[11px] font-medium text-slate-400 block truncate">Policy Flags</span>
+            <span className={`text-xl font-bold font-mono ${
+              metrics.prohibitedModsCount > 0 
+                ? 'text-rose-400' 
+                : metrics.restrictedModsCount > 0 
+                  ? 'text-amber-400' 
+                  : 'text-slate-400'
+            }`}>
+              {metrics.prohibitedModsCount + metrics.restrictedModsCount}
+            </span>
+          </div>
+
+          {/* 3. Verified Official Mods */}
           <div className="p-3 rounded-lg bg-slate-900/90 border border-slate-800">
             <span className="text-[11px] font-medium text-slate-400 block truncate">Verified Mods</span>
             <span className="text-xl font-bold font-mono text-emerald-400">
@@ -167,7 +184,7 @@ export const SimpleOverviewCard: React.FC<SimpleOverviewCardProps> = ({
             </span>
           </div>
 
-          {/* 3. Unverified / Modified */}
+          {/* 4. Unverified / Modified */}
           <div className="p-3 rounded-lg bg-slate-900/90 border border-slate-800">
             <span className="text-[11px] font-medium text-slate-400 block truncate">Unverified / Modified</span>
             <span className={`text-xl font-bold font-mono ${metrics.unverifiedOrModifiedCount > 0 ? 'text-amber-400' : 'text-slate-400'}`}>
@@ -175,7 +192,7 @@ export const SimpleOverviewCard: React.FC<SimpleOverviewCardProps> = ({
             </span>
           </div>
 
-          {/* 4. Duplicate Files */}
+          {/* 5. Duplicate Files */}
           <div className="p-3 rounded-lg bg-slate-900/90 border border-slate-800">
             <span className="text-[11px] font-medium text-slate-400 block truncate">Duplicate Files</span>
             <span className={`text-xl font-bold font-mono ${metrics.duplicateFilesCount > 0 ? 'text-indigo-400' : 'text-slate-400'}`}>
@@ -183,7 +200,7 @@ export const SimpleOverviewCard: React.FC<SimpleOverviewCardProps> = ({
             </span>
           </div>
 
-          {/* 5. Scan Errors / Unavailable */}
+          {/* 6. Scan Errors / Unavailable */}
           <div className="p-3 rounded-lg bg-slate-900/90 border border-slate-800">
             <span className="text-[11px] font-medium text-slate-400 block truncate">Limited / Inaccessible</span>
             <span className={`text-xl font-bold font-mono ${metrics.scanErrorsOrUnavailableCount > 0 ? 'text-sky-400' : 'text-slate-400'}`}>
@@ -191,7 +208,7 @@ export const SimpleOverviewCard: React.FC<SimpleOverviewCardProps> = ({
             </span>
           </div>
 
-          {/* 6. Minecraft Versions */}
+          {/* 7. Minecraft Versions */}
           <div className="p-3 rounded-lg bg-slate-900/90 border border-slate-800">
             <span className="text-[11px] font-medium text-slate-400 block truncate">Game Client</span>
             <span className="text-xs font-semibold text-slate-200 block truncate mt-1">

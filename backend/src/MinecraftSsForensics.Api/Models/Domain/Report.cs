@@ -44,6 +44,18 @@ public class Report
     public string DetectedMinecraftVersionsJson { get; set; } = "[]";
     public string DetectedLoadersJson { get; set; } = "[]";
 
+    [MaxLength(100)]
+    public string? AppliedPolicyName { get; set; }
+
+    [MaxLength(32)]
+    public string? AppliedPolicyVersion { get; set; }
+
+    [MaxLength(64)]
+    public string? AppliedGamemode { get; set; }
+
+    [MaxLength(256)]
+    public string? AppliedPolicyRulesUrl { get; set; }
+
     public bool ConsentGiven { get; set; }
     
     [MaxLength(64)]

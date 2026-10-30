@@ -6,6 +6,7 @@ using MinecraftSsForensics.Api.Models.Domain;
 using MinecraftSsForensics.Api.Models.Dtos.Ingestion;
 using MinecraftSsForensics.Scanner.Client;
 using MinecraftSsForensics.Scanner.Engine;
+using MinecraftSsForensics.Scanner.Policy;
 
 namespace MinecraftSsForensics.Scanner.App;
 
@@ -15,6 +16,8 @@ public partial class MainWindow : Window
     private SubmitReportRequest? _scannedReport;
     private SubmitReportResponse? _uploadResult;
     private readonly IScannerEngine _engine;
+    private readonly ModPolicyRegistry _policyRegistry = new();
+    private ServerGamemodePolicy? _customPolicy;
     private IBackendApiClient? _apiClient;
 
     public MainWindow()
@@ -42,6 +45,63 @@ public partial class MainWindow : Window
         }
     }
 
+    private void CmbPolicyGamemode_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (CmbPolicyGamemode == null || TxtPolicyDescription == null || BtnBrowseCustomPolicy == null) return;
+
+        int idx = CmbPolicyGamemode.SelectedIndex;
+        BtnBrowseCustomPolicy.Visibility = idx == 7 ? Visibility.Visible : Visibility.Collapsed;
+
+        string gamemodeKey = idx switch
+        {
+            0 => "Crystal PvP",
+            1 => "Sword PvP",
+            2 => "Axe PvP",
+            3 => "UHC",
+            4 => "Pot PvP",
+            5 => "SMP",
+            6 => "Default",
+            _ => "Custom"
+        };
+
+        if (idx == 7)
+        {
+            TxtPolicyDescription.Text = _customPolicy != null
+                ? $"Loaded Custom Policy: '{_customPolicy.PolicyName}' (v{_customPolicy.PolicyVersion}, Gamemode: {_customPolicy.Gamemode}, {_customPolicy.Rules.Count} rules)."
+                : "Click 'Load JSON...' to select an administrator-supplied policy JSON file. Will fallback to Default if unselected.";
+        }
+        else
+        {
+            var p = _policyRegistry.GetPolicy(gamemodeKey);
+            TxtPolicyDescription.Text = p.Description;
+        }
+    }
+
+    private void BtnBrowseCustomPolicy_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Select Mod Policy JSON File",
+            Filter = "JSON Policy (*.json)|*.json|All Files (*.*)|*.*"
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            var (loadedPolicy, success, errors) = _policyRegistry.LoadPolicyFromFile(dialog.FileName);
+            if (success)
+            {
+                _customPolicy = loadedPolicy;
+                TxtPolicyDescription.Text = $"Loaded Custom Policy: '{_customPolicy.PolicyName}' (v{_customPolicy.PolicyVersion}, Gamemode: {_customPolicy.Gamemode}, {_customPolicy.Rules.Count} rules).";
+                MessageBox.Show($"Policy '{_customPolicy.PolicyName}' loaded successfully ({_customPolicy.Rules.Count} rules).", "Policy Loaded", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                string errMsg = string.Join("\n", errors);
+                MessageBox.Show($"Could not load policy JSON:\n{errMsg}\n\nFalling back to default policy.", "Invalid Policy", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+    }
+
     private async void BtnStartScan_Click(object sender, RoutedEventArgs e)
     {
         if (ChkConsent.IsChecked != true)
@@ -52,6 +112,26 @@ public partial class MainWindow : Window
 
         ScanMode mode = RbQuickScan.IsChecked == true ? ScanMode.Quick : ScanMode.Full;
         string? customDir = string.IsNullOrWhiteSpace(TxtCustomPath.Text) ? null : TxtCustomPath.Text.Trim();
+
+        ServerGamemodePolicy selectedPolicy;
+        if (CmbPolicyGamemode.SelectedIndex == 7 && _customPolicy != null)
+        {
+            selectedPolicy = _customPolicy;
+        }
+        else
+        {
+            string gamemodeKey = CmbPolicyGamemode.SelectedIndex switch
+            {
+                0 => "Crystal PvP",
+                1 => "Sword PvP",
+                2 => "Axe PvP",
+                3 => "UHC",
+                4 => "Pot PvP",
+                5 => "SMP",
+                _ => "Default"
+            };
+            selectedPolicy = _policyRegistry.GetPolicy(gamemodeKey);
+        }
 
         SwitchView("Scanning");
         _scanCts = new CancellationTokenSource();
@@ -68,7 +148,7 @@ public partial class MainWindow : Window
             LblVerifiedCount.Text = update.VerifiedModsCount.ToString();
             LblFlaggedCount.Text = update.FlaggedFindingsCount.ToString();
 
-            LblStatus.Text = $"Scanning: {update.CurrentCategory} ({update.PercentComplete}%)";
+            LblStatus.Text = $"Scanning ({selectedPolicy.Gamemode}): {update.CurrentCategory} ({update.PercentComplete}%)";
         });
 
         try
@@ -78,12 +158,13 @@ public partial class MainWindow : Window
                 customDirectory: customDir,
                 onlyCustomDirectory: !string.IsNullOrWhiteSpace(customDir),
                 progress: progress,
+                policy: selectedPolicy,
                 ct: _scanCts.Token);
 
             // Populate Review View
             PopulateReviewView(_scannedReport);
             SwitchView("Review");
-            LblStatus.Text = "Scan completed. Please review findings before confirming upload.";
+            LblStatus.Text = $"Scan completed under {selectedPolicy.Gamemode} policy. Please review findings before confirming upload.";
         }
         catch (OperationCanceledException)
         {
@@ -207,7 +288,7 @@ public partial class MainWindow : Window
         {
             try
             {
-                Process.Start(new ProcessStartInfo
+                System.Diagnostics.Process.Start(new ProcessStartInfo
                 {
                     FileName = TxtShareUrl.Text,
                     UseShellExecute = true

@@ -207,6 +207,34 @@
                         </StackPanel>
                     </Border>
 
+                    <!-- Server Gamemode & Policy Rulebook Selection -->
+                    <Border Background="#111827" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="8" Padding="18" Margin="0,0,0,16">
+                        <StackPanel>
+                            <TextBlock Text="Server Gamemode &amp; Policy Rulebook" FontSize="13" FontWeight="Bold" Foreground="#F8FAFC" Margin="0,0,0,6"/>
+                            <TextBlock Text="Select the competitive ruleset for this investigation. Policies independently govern whether mods are allowed, restricted, or prohibited." Foreground="#94A3B8" FontSize="11" Margin="0,0,0,10" TextWrapping="Wrap"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ComboBox x:Name="CmbPolicyGamemode" Height="30" Background="#0F172A" Foreground="#E2E8F0" BorderBrush="#334155" SelectedIndex="0" VerticalContentAlignment="Center" SelectionChanged="CmbPolicyGamemode_SelectionChanged">
+                                    <ComboBoxItem Content="Crystal PvP (End Crystal Combat Ruleset)"/>
+                                    <ComboBoxItem Content="Sword PvP (1.8 / 1.9+ Sword Duels Ruleset)"/>
+                                    <ComboBoxItem Content="Axe PvP (Axe &amp; Shield Ruleset)"/>
+                                    <ComboBoxItem Content="UHC (Ultra Hardcore Survival Ruleset)"/>
+                                    <ComboBoxItem Content="Pot PvP (Nodebuff &amp; Potion Ruleset)"/>
+                                    <ComboBoxItem Content="SMP (Survival Multiplayer &amp; Technical Vanilla+)"/>
+                                    <ComboBoxItem Content="Default (General Competitive Standard)"/>
+                                    <ComboBoxItem Content="Custom Policy File (.json)..."/>
+                                </ComboBox>
+                                <Button x:Name="BtnBrowseCustomPolicy" Grid.Column="1" Content="Load JSON..." Margin="8,0,0,0" Height="30" Visibility="Collapsed" Click="BtnBrowseCustomPolicy_Click"/>
+                            </Grid>
+
+                            <TextBlock x:Name="TxtPolicyDescription" Text="Enforces strict anti-automation and fair perspective in end crystal combat. Freecam, fast-placement (Tweakeroo), and structure bounding boxes are prohibited." Foreground="#CBD5E1" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
                     <!-- Consent Confirmation -->
                     <Border Background="#111827" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,16">
                         <StackPanel>

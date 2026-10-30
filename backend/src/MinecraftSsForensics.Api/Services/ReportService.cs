@@ -56,6 +56,10 @@ public class ReportService : IReportService
             OsArchitecture = string.IsNullOrWhiteSpace(request.OsArchitecture) ? "x64" : request.OsArchitecture,
             DetectedMinecraftVersionsJson = JsonSerializer.Serialize(request.DetectedMinecraftVersions, JsonOpts),
             DetectedLoadersJson = JsonSerializer.Serialize(request.DetectedLoaders, JsonOpts),
+            AppliedPolicyName = request.AppliedPolicyName,
+            AppliedPolicyVersion = request.AppliedPolicyVersion,
+            AppliedGamemode = request.AppliedGamemode,
+            AppliedPolicyRulesUrl = request.AppliedPolicyRulesUrl,
             ConsentGiven = request.ConsentConfirmation.ConsentGiven,
             CollectionScopeVersion = request.ConsentConfirmation.CollectionScopeVersion,
             ConsentTimestamp = request.ConsentConfirmation.ConsentTimestamp,
@@ -235,6 +239,10 @@ public class ReportService : IReportService
             OsArchitecture = report.OsArchitecture,
             DetectedMinecraftVersions = detectedVersions,
             DetectedLoaders = detectedLoaders,
+            AppliedPolicyName = report.AppliedPolicyName,
+            AppliedPolicyVersion = report.AppliedPolicyVersion,
+            AppliedGamemode = report.AppliedGamemode,
+            AppliedPolicyRulesUrl = report.AppliedPolicyRulesUrl,
             Consent = new ConsentDetailDto
             {
                 ConsentGiven = report.ConsentGiven,
