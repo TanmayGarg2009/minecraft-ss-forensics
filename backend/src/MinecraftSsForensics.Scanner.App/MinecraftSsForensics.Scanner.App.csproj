@@ -1,8 +1,7 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\MinecraftSsForensics.Scanner\MinecraftSsForensics.Scanner.csproj" />
-    <ProjectReference Include="..\MinecraftSsForensics.Api\MinecraftSsForensics.Api.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -11,6 +10,12 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <ApplicationIcon></ApplicationIcon>
+    <AssemblyTitle>Minecraft SS Forensics Standalone Scanner</AssemblyTitle>
+    <Product>Minecraft SS Forensics</Product>
+    <Version>2.0.0</Version>
+    <FileVersion>2.0.0.0</FileVersion>
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
   </PropertyGroup>
 
 </Project>

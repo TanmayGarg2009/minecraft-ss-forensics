@@ -1,83 +1,59 @@
 # Security & Privacy Model
 
-## 1. Threat Model & Scope
+## 1. Threat Model & Privacy Principles
 
-Minecraft SS Forensics is designed for consent-based investigations between players and server staff. The architecture explicitly balances forensic diagnostic utility with privacy, anonymity, and anti-abuse protections.
+Minecraft SS Forensics is designed for consent-based forensic investigations between Minecraft players and server anti-cheat staff. The architecture is engineered to provide rigorous diagnostic clarity while maintaining uncompromising standards of user privacy, data isolation, and non-invasive execution.
 
-### In-Scope Security Objectives
-1. **Report Isolation**: A viewer possessing link `mc_A` must never be able to discover, enumerate, or guess link `mc_B`.
-2. **Access Revocation**: The player who uploaded the report can immediately delete it at any time using their unguessable `DeletionKey`.
-3. **Automatic Data Lifecycle**: Reports do not persist indefinitely; retention expires after a set window (default 7 days, max 30 days), after which the database records and raw files are destroyed.
-4. **Injection Defense**: Malicious players or scanners cannot execute stored Cross-Site Scripting (XSS), SQL injection, or server filesystem path traversal.
-5. **No Stealth or Remote Execution**: The platform never sends commands to the player's computer, executes remote code, or captures personal credentials/unrelated browser data.
-
----
-
-## 2. Bearer-Link Access Model
-
-### How It Works
-Anyone with the complete URL (`https://<domain>/report/{publicId}`) can view the forensic report. This intentionally replaces complex staff login infrastructure, preventing staff credential database compromises and enabling rapid sharing during live screenshare sessions.
-
-### Mathematical Security of Identifiers
-- **Entropy Source**: Cryptographically secure random bytes generated via `System.Security.Cryptography.RandomNumberGenerator`.
-- **Length**: 18 random bytes (144 bits of entropy) encoded into a 24-character Base62 string prefixed with `mc_` (e.g. `mc_fddy1tJ6mEK4IxfFRv`).
-- **Brute-Force Resistance**: With 144 bits of entropy ($2^{144} \approx 2.23 \times 10^{43}$ possibilities), an attacker submitting 10,000 guesses per second would require over $7 \times 10^{31}$ years to encounter a collision by chance.
-- **Enumeration Prevention**: Public IDs are completely decoupled from database sequential primary keys (internal GUIDs).
+### Core Security Objectives
+1. **Zero-Server Exposure**: No telemetry, evidence, or personal data is transmitted to central servers, cloud buckets, or third-party databases.
+2. **Read-Only Non-Invasive Safety**: The application operates in user mode without kernel drivers, background services, code injection, or system modifications.
+3. **Explicit Player Consent**: Forensic categories require affirmative opt-in. Sensitive categories (specifically browser history) are strictly opt-in and off by default.
+4. **Offline Cryptographic Seals**: Every report is sealed with a deterministic SHA-256 digest so staff can immediately detect offline tampering or falsification.
+5. **Strict Secret Redaction**: JVM launch arguments, environment tokens, and authentication parameters are automatically redacted in memory before display or export.
 
 ---
 
-## 3. Cryptographic Deletion Credentials
+## 2. Privacy & Data Protection Controls
 
-### Secret Generation & Storage
-- When a report is created, a 256-bit cryptographic token is generated: `del_<64 hex chars>`.
-- The plaintext deletion key is delivered **only once** to the uploader in the `POST /api/v1/reports` JSON response.
-- The server computes an HMAC-SHA256 hash using a server-side secret salt (`Security:HashSalt`):
-  $$\text{Hash} = \text{HMAC-SHA256}(\text{DeletionKey}, \text{Salt})$$
-- The database stores **only** the computed hash (`DeletionKeyHash`).
-- If the database is compromised, attackers cannot derive the plaintext deletion keys to delete other players' reports.
+### A. Browser History Auditing (Sensitive Category)
+- **Problem**: Traditional screensharing tools dump entire browser histories, exposing search queries, personal interests, private purchases, and personal bookmarks.
+- **Our Architecture**:
+  - The browser history auditor is **explicitly optional and unchecked by default**.
+  - If enabled by the player, it strictly filters Chromium SQLite history files **only** for known cheat distribution domains (`vape.gg`, `doomsdayclient.com`, `drip.gg`).
+  - Search queries, URL paths, form data, passwords, session tokens, and unrelated web domains are completely ignored and never read into memory.
 
-### Timing Attack Mitigation
-When a deletion request is evaluated, `CryptographicOperations.FixedTimeEquals` is utilized to compare byte arrays in constant time, preventing timing-based side-channel analysis.
+### B. Secret Redaction (`CommandLineRedactor`)
+- Scans `javaw.exe` process arguments for known authentication tokens:
+  - `--accessToken <token>` $\rightarrow$ `--accessToken [REDACTED]`
+  - `--uuid <uuid>` $\rightarrow$ `--uuid [REDACTED]`
+  - `--session <session>` $\rightarrow$ `--session [REDACTED]`
+  - `--password <pass>` $\rightarrow$ `--password [REDACTED]`
+- Guarantees that sensitive Mojang / Microsoft session tokens cannot be leaked in exported reports or shared screens.
 
----
-
-## 4. Stored XSS & Output Sanitization
-
-Forensic reports display user-originating filenames, process arguments, and rule titles:
-1. **Server Validation Gate**: The `ReportSubmissionValidator` scans all text fields for script tags (`<script>`, `javascript:`, `onerror=`, `onload=`, `<iframe>`). Payloads containing these tokens are rejected with HTTP 400.
-2. **Client React Output Escaping**: React escapes all JSX text by default. No `dangerouslySetInnerHTML` is used in any component.
-3. **Content Security Policy (CSP)**:
-   ```http
-   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';
-   ```
-4. **Security Headers**:
-   - `X-Content-Type-Options: nosniff`
-   - `X-Frame-Options: DENY`
-   - `Referrer-Policy: strict-origin-when-cross-origin`
-   - `Permissions-Policy: camera=(), microphone=(), geolocation=()`
+### C. Safe Archive Extraction (`SafeArchiveInspector`)
+- Inspects user `.jar` files in memory without extracting arbitrary files to the filesystem.
+- Enforces strict Zip-Bomb guards:
+  - Maximum archive entries: 10,000
+  - Maximum uncompressed total size: 250 MB
+  - Maximum compression ratio threshold: 100:1
+  - Traversal defense: Discards any entry containing `../` or root paths.
 
 ---
 
-## 5. Storage Security & Path Traversal
+## 3. Cryptographic Integrity Seal Verification
 
-Raw evidence files are handled by `LocalEvidenceStorageService`:
-- File and report IDs are strictly sanitized using `Path.GetInvalidFileNameChars()`.
-- The target path is verified against the canonical root directory using `Path.GetFullPath()`. If the computed path does not start with the configured storage root directory, an `InvalidOperationException` is thrown, blocking `../` directory traversal attempts.
-
----
-
-## 6. Retention & Cleanup Engine
-
-1. Reports define an `ExpiresAt` UTC timestamp upon ingestion (`UtcNow.AddDays(retentionDays)`).
-2. The `ReportCleanupBackgroundService` runs hourly in the background:
-   - Queries all reports where `ExpiresAt <= DateTimeOffset.UtcNow`.
-   - Calls `IStorageService.DeleteReportEvidenceAsync(report.PublicId)` to purge disk artifacts.
-   - Cascades deletion to all database entities (`Findings`, `EvidenceItems`, `TimelineEvents`, `DiagnosticItems`).
-3. If an expired report is queried prior to background purge, `ReportService` checks `ExpiresAt` and immediately returns `404 Not Found`.
+To prevent players from hand-editing report JSON files to erase detected cheats:
+1. When a scan completes, the engine serializes a canonical normalized JSON payload of all findings, mods, diagnostic items, and summary counters.
+2. It computes the SHA-256 digest:
+   $$\text{Seal} = \text{SHA-256}(\text{Canonical Normalized Telemetry})$$
+3. When staff opens the `.json` report in the Standalone Staff Viewer, the seal is recomputed from the payload and compared.
+4. If a player modifies a single character (e.g. changing `"ConfirmedCheatArtifact"` to `"Informational"`), the viewer flags the mismatch: `TAMPER DETECTED: Expected digest mismatch`.
 
 ---
 
-## 7. Operational Limitations & Privacy Notice
+## 4. XSS & Offline HTML Escaping
 
-- **Bearer Link Sensitivity**: Because anyone with the URL can view the report, players must only provide the link to verified server staff.
-- **Local Artifacts Only**: The scanner only collects diagnostic information disclosed in `collectionScopeVersion`. Private personal documents, browser history, passwords, and private chats are outside the collection scope and strictly rejected by the data model.
+The Standalone HTML Exporter (`StandaloneHtmlExporter`) generates self-contained `.html` reports that can be viewed in standard web browsers:
+- All dynamic strings (mod names, filenames, command lines, detection explanations) are strictly passed through `WebUtility.HtmlEncode()`.
+- JavaScript event attributes (`onerror=`, `onload=`, `javascript:`) are escaped.
+- Inline styles and scripts are completely self-contained with no external CDN requests or remote tracker calls.

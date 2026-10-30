@@ -5,6 +5,7 @@
 [Ll]ogs/
 dist/
 build/
+release/
 
 # Local databases & uploads
 *.db

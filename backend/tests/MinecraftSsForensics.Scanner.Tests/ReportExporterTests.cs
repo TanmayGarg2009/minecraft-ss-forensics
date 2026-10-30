@@ -1,6 +1,6 @@
 using System.Text.Json;
-using MinecraftSsForensics.Api.Models.Dtos.Ingestion;
 using MinecraftSsForensics.Scanner.Export;
+using MinecraftSsForensics.Scanner.Models.Legacy;
 using Xunit;
 
 namespace MinecraftSsForensics.Scanner.Tests;

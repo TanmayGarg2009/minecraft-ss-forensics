@@ -143,30 +143,42 @@ public class ModPolicyEngine
             result.Reason = matchedRule.PolicyReason;
 
             // Strict Transparency & Decoupling Documentation
-            if (verification.State == ModVerificationState.VERIFIED_EXACT_RELEASE)
+            if (result.Policy.IsProhibited())
             {
-                if (result.Policy == GameplayPolicy.PROHIBITED)
+                string prohibitionType = result.Policy switch
                 {
-                    result.Explanation = $"Verified as an authentic official release of '{matchedRule.ModName}', but is expressly PROHIBITED under {policy.Gamemode} rules: {matchedRule.PolicyReason}";
-                    result.LimitationsAndUncertainty = "The file is an authentic, unmodified official release, but provides prohibited competitive gameplay advantages.";
-                }
-                else if (result.Policy == GameplayPolicy.RESTRICTED)
+                    GameplayPolicy.PROHIBITED_POSSESSION => "PROHIBITED (POSSESSION BANNED)",
+                    GameplayPolicy.PROHIBITED_EXECUTION => "PROHIBITED (EXECUTION BANNED)",
+                    GameplayPolicy.PROHIBITED_GAMEPLAY_USE => "PROHIBITED (GAMEPLAY USE BANNED)",
+                    _ => "PROHIBITED"
+                };
+
+                if (verification.State == ModVerificationState.VERIFIED_EXACT_RELEASE)
                 {
-                    result.Explanation = $"Verified official release of '{matchedRule.ModName}'. Permitted under {policy.Gamemode} ONLY if restricted conditions are met: {matchedRule.RestrictionConditions}";
-                    result.LimitationsAndUncertainty = "Scanner confirms authentic binary, but in-game configuration must be audited by staff to verify restriction compliance.";
+                    result.Explanation = $"Verified as an authentic official release of '{matchedRule.ModName}', but is {prohibitionType} under {policy.Gamemode} rules: {matchedRule.PolicyReason}";
+                    result.LimitationsAndUncertainty = result.Policy == GameplayPolicy.PROHIBITED_POSSESSION
+                        ? "Under this server's rules, confirmed possession or installation is sufficient for a policy violation; proof of gameplay use is NOT required."
+                        : "The file is an authentic official release, but provides prohibited competitive gameplay advantages.";
                 }
                 else
                 {
-                    result.Explanation = $"Verified official release of '{matchedRule.ModName}'. Permitted for competitive play under {policy.Gamemode}.";
-                    result.LimitationsAndUncertainty = "Authenticity and policy compliance both verified.";
+                    result.Explanation = $"Artifact matches {prohibitionType} rule for '{matchedRule.ModName}' under {policy.Gamemode} rules: {matchedRule.PolicyReason}";
+                    result.LimitationsAndUncertainty = result.Policy == GameplayPolicy.PROHIBITED_POSSESSION
+                        ? "Under this server's rules, confirmed possession or installation is sufficient for a policy violation."
+                        : matchSignal == "FilenameAlias"
+                            ? "Matched solely on filename alias. Internal metadata could not verify project identity."
+                            : "Policy decision based on declared metadata; authenticity could not be verified against official repositories.";
                 }
             }
-            else
+            else if (result.Policy == GameplayPolicy.RESTRICTED)
             {
-                result.Explanation = $"{matchedRule.ModName} ({matchedRule.Policy}): {matchedRule.PolicyReason}";
-                result.LimitationsAndUncertainty = matchSignal == "FilenameAlias"
-                    ? "Matched solely on filename alias. Internal metadata could not verify project identity."
-                    : "Authenticity could not be verified against official Modrinth/CurseForge repositories; policy decision based on declared metadata.";
+                result.Explanation = $"Verified official release of '{matchedRule.ModName}'. Permitted under {policy.Gamemode} ONLY if restricted conditions are met: {matchedRule.RestrictionConditions}";
+                result.LimitationsAndUncertainty = "Scanner confirms binary, but in-game configuration must be audited by staff to verify restriction compliance.";
+            }
+            else if (result.Policy == GameplayPolicy.ALLOWED)
+            {
+                result.Explanation = $"'{matchedRule.ModName}' is permitted for competitive play under {policy.Gamemode}.";
+                result.LimitationsAndUncertainty = "Policy compliance verified.";
             }
         }
         else

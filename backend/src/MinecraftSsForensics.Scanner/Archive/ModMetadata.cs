@@ -15,6 +15,8 @@ public class ModMetadata
     public Dictionary<string, string> ManifestAttributes { get; set; } = new();
     public bool HasSuspiciousEntrypoints { get; set; }
     public List<string> SuspiciousNotes { get; set; } = new();
+    public List<string> MatchedCheatSignatures { get; set; } = new();
+    public BytecodeAnalysisResult BytecodeAnalysis { get; set; } = new();
     public bool ParseSuccess { get; set; }
     public string? ParseError { get; set; }
 }

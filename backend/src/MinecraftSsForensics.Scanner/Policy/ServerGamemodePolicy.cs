@@ -29,6 +29,16 @@ public class ServerGamemodePolicy
     public string PolicyVersion { get; set; } = "1.0.0";
 
     /// <summary>
+    /// Organization, league, or server that authored this policy.
+    /// </summary>
+    public string Publisher { get; set; } = "Example Competition League";
+
+    /// <summary>
+    /// Indicates whether this is an example template or server-verified ruleset.
+    /// </summary>
+    public bool IsExamplePolicy { get; set; } = true;
+
+    /// <summary>
     /// Effective date of this policy (e.g., "2026-01-01").
     /// </summary>
     public string EffectiveDate { get; set; } = string.Empty;
@@ -37,6 +47,11 @@ public class ServerGamemodePolicy
     /// URL to the server's official rulebook or guidelines.
     /// </summary>
     public string? ServerRulesUrl { get; set; }
+
+    /// <summary>
+    /// Explicitly permitted mod IDs that bypass general restrictions.
+    /// </summary>
+    public List<string> ExplicitlyPermittedMods { get; set; } = new();
 
     /// <summary>
     /// Brief description of the competitive philosophy and expectations for this gamemode.

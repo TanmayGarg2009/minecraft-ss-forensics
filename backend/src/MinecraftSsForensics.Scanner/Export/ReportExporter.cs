@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using MinecraftSsForensics.Api.Models.Dtos.Ingestion;
+using MinecraftSsForensics.Scanner.Models.Legacy;
 using MinecraftSsForensics.Scanner.Process;
 
 namespace MinecraftSsForensics.Scanner.Export;

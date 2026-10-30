@@ -1,19 +1,16 @@
-﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{87D46FAD-2E53-4698-A1A0-F512488261FF}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MinecraftSsForensics.Api", "src\MinecraftSsForensics.Api\MinecraftSsForensics.Api.csproj", "{AD53D15D-F8E8-4138-BB1F-987E6F18C090}"
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{37934128-0C8D-47A9-9D58-0671E51B9174}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MinecraftSsForensics.Tests", "tests\MinecraftSsForensics.Tests\MinecraftSsForensics.Tests.csproj", "{0276CE69-AE65-4453-96A7-C39372BA023E}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MinecraftSsForensics.Scanner", "src\MinecraftSsForensics.Scanner\MinecraftSsForensics.Scanner.csproj", "{5A96A716-92E5-4BFC-BE02-57E97297756A}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MinecraftSsForensics.Scanner.App", "src\MinecraftSsForensics.Scanner.App\MinecraftSsForensics.Scanner.App.csproj", "{60CD7C2F-6E45-4568-B66A-B75C99059EE4}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MinecraftSsForensics.Viewer.App", "src\MinecraftSsForensics.Viewer.App\MinecraftSsForensics.Viewer.App.csproj", "{C88941EA-3129-4F54-9CEE-AE3B38A60F5D}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MinecraftSsForensics.Scanner.Tests", "tests\MinecraftSsForensics.Scanner.Tests\MinecraftSsForensics.Scanner.Tests.csproj", "{2F9AACB0-831D-4CA5-871E-F4D6FF9AE406}"
 EndProject
@@ -26,14 +23,6 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{AD53D15D-F8E8-4138-BB1F-987E6F18C090}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{AD53D15D-F8E8-4138-BB1F-987E6F18C090}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{AD53D15D-F8E8-4138-BB1F-987E6F18C090}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{AD53D15D-F8E8-4138-BB1F-987E6F18C090}.Release|Any CPU.Build.0 = Release|Any CPU
-		{0276CE69-AE65-4453-96A7-C39372BA023E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{0276CE69-AE65-4453-96A7-C39372BA023E}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{0276CE69-AE65-4453-96A7-C39372BA023E}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{0276CE69-AE65-4453-96A7-C39372BA023E}.Release|Any CPU.Build.0 = Release|Any CPU
 		{5A96A716-92E5-4BFC-BE02-57E97297756A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{5A96A716-92E5-4BFC-BE02-57E97297756A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{5A96A716-92E5-4BFC-BE02-57E97297756A}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -42,16 +31,19 @@ Global
 		{60CD7C2F-6E45-4568-B66A-B75C99059EE4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{60CD7C2F-6E45-4568-B66A-B75C99059EE4}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{60CD7C2F-6E45-4568-B66A-B75C99059EE4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C88941EA-3129-4F54-9CEE-AE3B38A60F5D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C88941EA-3129-4F54-9CEE-AE3B38A60F5D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C88941EA-3129-4F54-9CEE-AE3B38A60F5D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C88941EA-3129-4F54-9CEE-AE3B38A60F5D}.Release|Any CPU.Build.0 = Release|Any CPU
 		{2F9AACB0-831D-4CA5-871E-F4D6FF9AE406}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{2F9AACB0-831D-4CA5-871E-F4D6FF9AE406}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2F9AACB0-831D-4CA5-871E-F4D6FF9AE406}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2F9AACB0-831D-4CA5-871E-F4D6FF9AE406}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
-		{AD53D15D-F8E8-4138-BB1F-987E6F18C090} = {87D46FAD-2E53-4698-A1A0-F512488261FF}
-		{0276CE69-AE65-4453-96A7-C39372BA023E} = {37934128-0C8D-47A9-9D58-0671E51B9174}
 		{5A96A716-92E5-4BFC-BE02-57E97297756A} = {87D46FAD-2E53-4698-A1A0-F512488261FF}
 		{60CD7C2F-6E45-4568-B66A-B75C99059EE4} = {87D46FAD-2E53-4698-A1A0-F512488261FF}
+		{C88941EA-3129-4F54-9CEE-AE3B38A60F5D} = {87D46FAD-2E53-4698-A1A0-F512488261FF}
 		{2F9AACB0-831D-4CA5-871E-F4D6FF9AE406} = {37934128-0C8D-47A9-9D58-0671E51B9174}
 	EndGlobalSection
 EndGlobal

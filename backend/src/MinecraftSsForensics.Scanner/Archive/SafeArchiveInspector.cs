@@ -51,6 +51,25 @@ public class SafeArchiveInspector : ISafeArchiveInspector
                     metadata.SuspiciousNotes.Add($"Archive entry contains directory traversal path: {entry.FullName}");
                 }
 
+                if (entry.FullName.EndsWith(".class", StringComparison.OrdinalIgnoreCase))
+                {
+                    var cheatSig = Cheats.CheatDetectionDatabase.MatchClassOrPackage(entry.FullName);
+                    if (cheatSig != null)
+                    {
+                        metadata.HasSuspiciousEntrypoints = true;
+                        metadata.MatchedCheatSignatures.Add($"{cheatSig.Name} (Class: {entry.FullName})");
+                        metadata.SuspiciousNotes.Add($"Archive contains known cheat class: {entry.FullName} ({cheatSig.Name})");
+                    }
+                    else
+                    {
+                        var keyword = Cheats.CheatDetectionDatabase.MatchCombatBytecodeKeyword(entry.FullName);
+                        if (keyword != null)
+                        {
+                            metadata.SuspiciousNotes.Add($"Archive contains suspicious combat capability class: {entry.FullName}");
+                        }
+                    }
+                }
+
                 totalUncompressed += entry.Length;
                 totalCompressed += entry.CompressedLength;
             }
@@ -121,6 +140,17 @@ public class SafeArchiveInspector : ISafeArchiveInspector
             {
                 metadata.Loader = "Vanilla / Plain JAR";
             }
+
+            // Deep static bytecode capability inspection (packets, automation, combat, mixins)
+            try
+            {
+                metadata.BytecodeAnalysis = StaticBytecodeAnalyzer.AnalyzeArchive(archive);
+                foreach (var cap in metadata.BytecodeAnalysis.DetectedCapabilities)
+                {
+                    metadata.SuspiciousNotes.Add($"Bytecode capability: {cap.CapabilityType} in {cap.ClassName} ({cap.ObservedSymbolOrMethod})");
+                }
+            }
+            catch { /* Skip unparseable class structures safely */ }
 
             metadata.ParseSuccess = true;
             return metadata;

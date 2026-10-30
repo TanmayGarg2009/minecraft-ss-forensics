@@ -1,6 +1,10 @@
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Management;
 using System.Security.Cryptography.X509Certificates;
+using System.Text.RegularExpressions;
 using MinecraftSsForensics.Scanner.Hashing;
 
 namespace MinecraftSsForensics.Scanner.Process;
@@ -19,6 +23,10 @@ public class ProcessScanner : IProcessScanner
         "javaw", "java", "minecraftlauncher", "prismlauncher", "modrinthapp", "curseforge",
         "lunar client", "badlion client", "feather"
     };
+
+    private static readonly Regex JnaFileNameRegex = new(
+        @"^(?:jna\d+|jnidispatch|lwjgl[a-z0-9_]*|openal(?:32|64)?|glfw[0-9]*|jemalloc|tinyfd|jinput-[a-z0-9_\-]+)\.dll$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     public ProcessScanner(IFileHasher? hasher = null)
     {
@@ -61,10 +69,17 @@ public class ProcessScanner : IProcessScanner
                     item.AccessLimitationNote = $"Process metadata restricted: {ex.Message}";
                 }
 
-                // Query command line if accessible
-                item.RedactedCommandLine = TryGetCommandLine(proc.Id);
+                // Query command line and parent process
+                var (cmdLine, parentId) = TryGetProcessDetails(proc.Id);
+                item.RedactedCommandLine = cmdLine;
+                item.ParentProcessId = parentId;
+                if (parentId.HasValue)
+                {
+                    try { item.ParentProcessName = System.Diagnostics.Process.GetProcessById(parentId.Value).ProcessName; }
+                    catch { /* Parent already exited */ }
+                }
 
-                // If game process, extract java version if present in path or args
+                // If game process, extract java version if present
                 if (item.IsGameProcess && !string.IsNullOrEmpty(item.ExecutablePath))
                 {
                     item.JavaVersion = TryExtractJavaVersion(item.ExecutablePath);
@@ -128,6 +143,25 @@ public class ProcessScanner : IProcessScanner
                         {
                             modInfo.IsSigned = false;
                         }
+
+                        try
+                        {
+                            var fileInfo = new FileInfo(path);
+                            modInfo.FileSizeBytes = fileInfo.Length;
+                        }
+                        catch { /* Ignored */ }
+                    }
+
+                    // Perform strict Java native library extraction provenance check
+                    if (isTemp)
+                    {
+                        var (isNativeLib, explanation) = CheckJavaNativeProvenance(path, name);
+                        modInfo.IsRecognizedJavaNativeLibrary = isNativeLib;
+                        modInfo.ProvenanceAssessment = explanation;
+                    }
+                    else if (isSystem)
+                    {
+                        modInfo.ProvenanceAssessment = "Standard Windows system library";
                     }
 
                     modules.Add(modInfo);
@@ -140,29 +174,91 @@ public class ProcessScanner : IProcessScanner
         }
         catch
         {
-            // Module enumeration denied (e.g. 32-bit to 64-bit boundary or permissions)
+            // Module enumeration denied (32-bit to 64-bit boundary or elevation)
         }
 
         return modules;
     }
 
-    private static string? TryGetCommandLine(int processId)
+    /// <summary>
+    /// Distinguishes legitimate Java native library extraction (JNA, LWJGL, OpenAL)
+    /// from suspicious DLL injection into javaw.exe without blanket whitelisting.
+    /// </summary>
+    public static (bool IsLegitimateNative, string Assessment) CheckJavaNativeProvenance(string filePath, string fileName)
+    {
+        string cleanName = Path.GetFileName(fileName);
+        bool matchesNamingPattern = JnaFileNameRegex.IsMatch(cleanName);
+
+        if (!File.Exists(filePath))
+        {
+            if (matchesNamingPattern)
+                return (true, $"Matches standard Java native library naming convention ({cleanName}), but file is unreadable on disk.");
+            return (false, "Unsigned module mapped from temporary directory with no disk artifact.");
+        }
+
+        try
+        {
+            var versionInfo = FileVersionInfo.GetVersionInfo(filePath);
+            string desc = versionInfo.FileDescription ?? string.Empty;
+            string product = versionInfo.ProductName ?? string.Empty;
+            string company = versionInfo.CompanyName ?? string.Empty;
+
+            bool hasJnaMetadata = desc.Contains("Java(TM) Native Access", StringComparison.OrdinalIgnoreCase) ||
+                                  desc.Contains("JNA", StringComparison.OrdinalIgnoreCase) ||
+                                  product.Contains("JNA", StringComparison.OrdinalIgnoreCase) ||
+                                  company.Contains("Timothy Wall", StringComparison.OrdinalIgnoreCase);
+
+            bool hasLwjglMetadata = desc.Contains("LWJGL", StringComparison.OrdinalIgnoreCase) ||
+                                    product.Contains("LWJGL", StringComparison.OrdinalIgnoreCase);
+
+            bool hasOpenAlMetadata = desc.Contains("OpenAL", StringComparison.OrdinalIgnoreCase) ||
+                                     product.Contains("OpenAL", StringComparison.OrdinalIgnoreCase);
+
+            bool hasJinputMetadata = desc.Contains("JInput", StringComparison.OrdinalIgnoreCase) ||
+                                     product.Contains("JInput", StringComparison.OrdinalIgnoreCase);
+
+            if (hasJnaMetadata || hasLwjglMetadata || hasOpenAlMetadata || hasJinputMetadata)
+            {
+                return (true, $"Verified legitimate Java native library extraction ({product} / {desc})");
+            }
+
+            if (matchesNamingPattern)
+            {
+                // Has valid naming pattern but missing embedded metadata
+                return (true, $"Pattern-matched Java native library ({cleanName}); standard temp-extract directory");
+            }
+        }
+        catch
+        {
+            if (matchesNamingPattern)
+                return (true, $"Pattern-matched Java native library ({cleanName})");
+        }
+
+        // Suspicious: unsigned DLL in temp that is NOT a known Java native library
+        return (false, "Unsigned DLL executing from temporary directory without Java native library provenance (potential injection artifact)");
+    }
+
+    private static (string? CommandLine, int? ParentProcessId) TryGetProcessDetails(int processId)
     {
         try
         {
             if (OperatingSystem.IsWindows())
             {
                 using var searcher = new ManagementObjectSearcher(
-                    $"SELECT CommandLine FROM Win32_Process WHERE ProcessId = {processId}");
+                    $"SELECT CommandLine, ParentProcessId FROM Win32_Process WHERE ProcessId = {processId}");
                 using var objects = searcher.Get();
 
                 foreach (ManagementObject obj in objects)
                 {
-                    var cmd = obj["CommandLine"]?.ToString();
-                    if (!string.IsNullOrEmpty(cmd))
+                    string? cmd = obj["CommandLine"]?.ToString();
+                    int? parentId = null;
+                    if (obj["ParentProcessId"] != null && int.TryParse(obj["ParentProcessId"].ToString(), out int pid))
                     {
-                        return CommandLineRedactor.Redact(cmd);
+                        parentId = pid;
                     }
+
+                    string? redacted = !string.IsNullOrEmpty(cmd) ? CommandLineRedactor.Redact(cmd) : null;
+                    return (redacted, parentId);
                 }
             }
         }
@@ -170,7 +266,7 @@ public class ProcessScanner : IProcessScanner
         {
             // WMI access denied or not available
         }
-        return null;
+        return (null, null);
     }
 
     private static string? TryExtractJavaVersion(string javaExePath)

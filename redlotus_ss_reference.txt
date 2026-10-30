@@ -1,0 +1,447 @@
+--------------------------------------------------------
+ MINECRAFT SCREENSHARING REFERENCE
+ BASICS ? ADVANCED
+--------------------------------------------------------
+
+
+????????????????????????????????????????????????????????
+?                     1. TOOLS                         ?
+?              DOWNLOAD FIRST, RUN LATER               ?
+????????????????????????????????????????????????????????
+
+RedLotus Downloader
+  What: SS tool downloader + in-depth guide
+  When: Start of SS, get the toolset
+  Link: https://github.com/ItzIceHere/RedLotus-Tool-Downloader/releases/download/RL/RedLotus.Downloader.exe
+
+Everything
+  What: Instant file search by name
+  When: Find any file instantly, sort by date modified
+  Link: https://www.voidtools.com/Everything-1.4.1.1032.x86-Setup.exe
+
+System Informer (Canary)
+  What: Process viewer, memory scanner, service analysis
+  When: Memory strings, process investigation, service checks
+  Link: https://systeminformer.com/canary
+
+WinPrefetchView
+  What: Parse Prefetch files, see execution history
+  When: Check if a file was ever executed
+  Link: https://www.nirsoft.net/utils/winprefetchview-x64.zip
+
+USN Journal
+  What: Check file renames, deletions, creation history
+  When: Prove a file was deleted/renamed/tampered with
+  Link: https://github.com/detect-ac/USNJournal/releases/download/forensics/USN.Journal.exe
+
+PcaSvcExecuted
+  What: Shows all EXEs ran, outputs txt of renamed/deleted
+  When: Find programs that were executed and removed
+  Link: https://github.com/spokwn/pcasvc-executed/releases/download/v0.8.6/PcaSvcExecuted.exe
+
+Deleted BAM Scanner
+  What: Checks for deleted BAM registry keys
+  When: Find execution traces that were cleared
+  Link: https://github.com/detect-ac/Deleted-BAM-Scanner/releases/download/forensics/Deleted.BAM.Keys.exe
+
+BrowsingHistoryView
+  What: View browser history across all browsers
+  When: Check for cheat sites, downloads, forum visits
+  Link: https://www.nirsoft.net/utils/browsinghistoryview.zip
+
+USBDeview
+  What: List all USB devices, connected/disconnected history
+  When: Check for flash drives used to transfer cheats
+  Link: https://www.nirsoft.net/utils/usbdeview.zip
+
+RegScanner
+  What: Scan registry for specific filenames/keys
+  When: Find traces of a specific cheat file in registry
+  Link: https://www.nirsoft.net/utils/regscanner.zip
+
+Luyten
+  What: Java decompiler, view .jar source code
+  When: Verify if a .jar mod is a cheat
+  Link: https://github.com/deathmarine/Luyten/releases/download/v0.5.4_Rebuilt_with_Latest_depenencies/luyten-0.5.4.exe
+
+
+????????????????????????????????????????????????????????
+?                   2. GENERAL CHECKING                ?
+?                WIN+R, QUICK WINS                     ?
+????????????????????????????????????????????????????????
+
+shell:recent
+  What: Recent files/folders accessed via Explorer
+  How: Win+R > shell:recent
+
+C:\$Recycle.bin
+  What: Deleted files not yet purged
+  How: Win+R > C:\$Recycle.bin
+
+regedit
+  What: Registry Editor
+  How: Win+R > regedit
+
+%temp%
+  What: Temporary files
+  How: Win+R > %temp%
+  Look for: jnativehook*.dll (autoclicker artifact)
+
+Task Manager
+  What: Check ran programs
+  How: Ctrl+Shift+Esc > Details
+  Note: If System Informer/Process Hacker installed, check those too
+
+
+????????????????????????????????????????????????????????
+?                  3. MINECRAFT SPECIFIC               ?
+?              MODS, JARS, ACTIVE FOLDER               ?
+????????????????????????????????????????????????????????
+
+FIND ACTIVE .MINECRAFT FOLDER
+  Method 1 (In-game):
+    Options > Resource Packs > Open Pack Folder
+    Navigate up one level = root game folder
+  Method 2 (Memory):
+    System Informer > javaw.exe > Memory > Strings
+    Filter contains: \mods or \versions
+    Copy the full path shown
+
+MODS FOLDER TIMESTAMP
+  What: Check tampering via folder modification date
+  How: Right-click mods folder > Properties
+  RED FLAG: "Date modified" is during session/SS = tampering
+
+MOD ANALYZER (Yarps)
+  powershell -ExecutionPolicy Bypass -Command "Invoke-Expression (Invoke-RestMethod https://raw.githubusercontent.com/YarpLetapStan/PowershellScripts/refs/heads/main/YarpsModAnalyzer6.0.ps1)"
+
+LUYTEN DECOMPILATION
+  What: View .jar source code
+  How: Drag .jar into Luyten
+  LOOK FOR:
+    • autoclicker, aimassist, reach, velocity, killaura
+    • scaffold, fly, speed, esp, xray, selfdestruct
+    • bypass, exploit
+    • Obfuscated names: a.class, b.class, single letters
+
+HASH VERIFICATION
+  What: Confirm file integrity via SHA256
+  How: Get-FileHash or HashMyFiles
+  How: Compare to official hash from Optifine.net, CurseForge, Modrinth
+  RED FLAG: Mismatch = modified/tampered file
+
+JAVAEDIT DETECTION
+  What: Modified vanilla client .jar
+  How: Hash the .jar in .minecraft/versions/{version}/
+  How: Compare to official Mojang hash
+  RED FLAG: Mismatch = modified vanilla client
+
+UNLOADED MOD DETECTION
+  What: Mod loaded then deleted/renamed after launch
+  How: System Informer > javaw.exe > Memory > Strings
+  How: Filter contains: full path to active mods folder
+  How: Compare memory results to disk contents
+  RED FLAG: Mod path in memory but file missing on disk
+
+
+????????????????????????????????????????????????????????
+?                4. EXECUTION ARTIFACTS                ?
+?           PREFETCH, BAM, PCA, CMD HISTORY            ?
+????????????????????????????????????????????????????????
+
+PREFETCH (C:\Windows\Prefetch)
+  Tool: WinPrefetchView
+  What: Shows every .exe ever run with timestamps
+  Check if disabled:
+    reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters" /v EnablePrefetcher
+    0 = disabled (RED FLAG)
+  Check if service stopped:
+    sc query sysmain
+    RUNNING = good, STOPPED = RED FLAG
+  View hidden prefetch files:
+    dir /ah C:\Windows\Prefetch
+
+BAM (Background Activity Moderator)
+  Where: HKLM\SYSTEM\CurrentControlSet\Services\bam\State\UserSettings\{SID}
+  What: Executed application paths + last execution time
+  Tool: Deleted BAM Scanner (finds cleared entries)
+
+PCA (Program Compatibility Assistant)
+  Where: HKCU\Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Compatibility Assistant\Store
+  What: Program paths PCA interacted with
+  Tool: PcaSvcExecuted.exe (shows all EXEs ran + renamed/deleted)
+
+CMD HISTORY
+  If CMD still open:
+    doskey /history
+  PowerShell history path:
+    (Get-PSReadLineOption).HistorySavePath
+    Open that file path in explorer
+
+
+????????????????????????????????????????????????????????
+?                  5. MEMORY STRINGS                  ?
+?              SYSTEM INFORMER CHEAT SHEET            ?
+????????????????????????????????????????????????????????
+
+SYSTEM INFORMER SETUP
+  • Right-click process > Properties > Memory > Strings
+  • Min length: 5
+  • Memory types: Mapped + Private
+  • Click Strings, then Filter
+
+JAVAW.EXE (MINECRAFT)
+  Filter contains:
+    Doomsday
+    DoomsdayClient
+    DoomsdayClient:::bot),%.R
+    DoomsdayClient:::u;<r,7NVce;Ga25
+    DoomsdayClient:::eObOiPdFJR 2
+    DoomsdayClient:::Wu&XNC]30?3=7
+    prestige
+    *.prestigeclient.vip0
+    prestigeclient.vip
+    prestigeclient.vip0Y0
+    prestige_4.properties
+    .prestigeclient.vip0
+    assets/minecraft/optifine/cit/profile/prestige/
+    .psaclient
+    198m
+    Auto Crystal
+    Anchor Macro
+    fastplace
+    autocrystal
+    legit totem
+    CrystalAura
+    AnchorAura
+    LegitRetotem
+    Auto Dtap
+    Auto Hit Crystal
+    Self Destruct
+    AutoInventoryTotem
+    Auto Shield Disabler
+    Auto Mace
+    Aimbot
+
+EXPLORER.EXE
+  Filter contains:
+    pcaclient (last 9 exe's ran)
+    file:/// (specific file you're hunting)
+
+CSRSS.EXE
+  Fewer private bytes:
+    regex: ^[A-Z]:\\.+.exe$
+  More private bytes:
+    regex: ^[A-Z]:\\.+.dll$
+    regex: ^(?:\\\\\?\\)?[A-Za-z]:\\.+$
+
+SVCHOST.EXE (PlugPlay / DCOMLaunch)
+  Filter contains: .jar
+
+SVCHOST.EXE (DPS)
+  regex: ^([a-zA-Z]:\\.+)\\?$
+  regex: ^!![A-Z]((?!Exe).)*$
+
+SVCHOST.EXE (PcaSvc)
+  Filter contains: jar
+  Filter contains: [cheat name]
+
+
+????????????????????????????????????????????????????????
+?               6. REGISTRY & EVENT LOGS              ?
+????????????????????????????????????????????????????????
+
+REGISTRY TARGETS
+  BAM: HKLM\SYSTEM\CurrentControlSet\Services\bam\State\UserSettings\{SID}
+  UserAssist: HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist\{GUID}\Count
+  RecentDocs: HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\RecentDocs
+  OpenSaveMRU: HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\ComDlg32\OpenSavePidlMRU\
+  USBSTOR: HKLM\SYSTEM\CurrentControlSet\Enum\USBSTOR
+  Run: HKLM\Software\Microsoft\Windows\CurrentVersion\Run
+  Run: HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+
+EVENT IDS (Event Viewer)
+  Security Log:
+    1102 = Security log cleared (manual, admin required)
+  System Log:
+    104 = Other event log cleared
+    4616 = System time changed
+    7036 = Service state change (eventlog stopped/started)
+  Application Log:
+    3079 = USN Journal deleted (fsutil usn deletejournal)
+
+
+????????????????????????????????????????????????????????
+?              7. FILESYSTEM FORENSICS                ?
+?           USN JOURNAL, ADS, RECOVERY                ?
+????????????????????????????????????????????????????????
+
+USN JOURNAL
+  Tool: USN.Journal.exe or JournalTrace
+  CMD (fsutil):
+    fsutil usn readjournal c: csv | findstr /i /C:"0x80000200" /C:"0x00001000" /C:"0x00002000" | findstr /i /C:".exe\"" /C:".pf\"" > filtered_journal.txt
+  Reason codes:
+    0x80000200 = Delete
+    0x00001000 = Rename (old)
+    0x00002000 = Rename (new)
+
+ADS (Alternate Data Streams)
+  CMD: dir /r
+  PowerShell: Get-Item -Path .\file.txt -Stream *
+  Tools: AlternateStreamView, Sysinternals Streams
+
+RECUVA
+  What: Deleted file recovery
+  How: Quick scan > look for recently deleted .exe/.dll/.jar
+  CRITICAL: DO NOT recover to original path
+
+
+????????????????????????????????????????????????????????
+?                 8. BYPASS DETECTION                 ?
+?         CLEARING, REPLACEMENT, TAMPERING            ?
+????????????????????????????????????????????????????????
+
+FILE REPLACEMENT
+  What: Cheat deleted, legit file put in same place with same name
+  How: USN Journal - Delete + Create/Rename (same path, short timeframe)
+  How: Compare Prefetch timestamp vs current file timestamp
+  How: DPS compilation timestamp mismatch
+
+PREFETCH CLEARING
+  What: Deleted Prefetch files to erase execution history
+  How: Empty Prefetch folder with SysMain running = cleared
+  How: USN Journal - FILE_DELETE on .pf files
+
+USN JOURNAL DELETION
+  What: Complete wipe of filesystem activity log
+  How: Event ID 3079 = confirmed clearing
+  How: JournalTrace - Oldest entry timestamp = very recent
+
+EVENT LOG CLEARING
+  What: Deleted security/application/system events
+  How: 1102 = Security log cleared
+  How: 104 = Other log cleared
+
+CMD OBFUSCATION
+  What: Hidden commands via transparency/color match
+  How: Right-click title bar > Properties > Colors
+  Check: Screen Text = Screen Background
+
+REGISTRY/POLICY TAMPERING
+  What: Disabled tools to hinder SS
+  How: gpresult /h gpreport.html
+  Keys:
+    DisableCMD: HKCU\Software\Policies\Microsoft\Windows\System\DisableCMD
+    NoRun: HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer\NoRun
+
+
+????????????????????????????????????????????????????????
+?                  9. MACRO DETECTION                 ?
+?             MOUSE SOFTWARE & BUTTON TESTS           ?
+????????????????????????????????????????????????????????
+
+MOUSE BUTTON TEST
+  Sites: cpstest.org/mouse-test/ or cps-check.com/mouse-buttons-test
+  Protocol:
+    1. Test with software OPEN
+    2. Test with software CLOSED (killed in task manager)
+  RED FLAG: Physical button press ? registered button
+
+LOGITECH G HUB
+  Where: %localappdata%\LGHUB\settings.db
+
+LOGITECH LGS
+  Where: %localappdata%\Logitech\Logitech Gaming Software\settings.json
+
+RAZER SYNAPSE 3
+  Where: C:\ProgramData\Razer\Synapse3\Accounts\
+  Where: %localappdata%\Razer\Synapse3\Log\
+
+RAZER SYNAPSE 2
+  Where: C:\Program Files (x86)\Razer\
+  Where: %localappdata%\Razer\
+  Where: %programdata%\Razer\
+
+STEELSERIES GG/ENGINE
+  Where: %localappdata%\steelseries-engine-3-client\Local Storage\leveldb\
+
+ROCCAT SWARM
+  Where: %appdata%\ROCCAT\SWARM\macro\custom_macro_list.xml
+  Where: %appdata%\ROCCAT\SWARM\macro\macro_list.dat
+
+RED DRAGON
+  Where: %homepath%\Documents\M### Gaming Mouse\MacroDB\MacroData.db
+
+GLORIOUS
+  Where: %appdata%\BY-COMBO2\*.json, *.ini
+
+COOLER MASTER
+  Where: %localappdata%\CoolerMaster\
+  Where: %appdata%\CoolerMaster\
+  Where: %programdata%\CoolerMaster\
+
+BLOODY
+  Where: C:\Program Files (x86)\Bloody7\Bloody7\Data\Mouse\English\ScriptsMacros\GunLib\
+
+ASUS ROG ARMOURY
+  Where: C:\Users\%username%\Documents\ASUS\ROG\ROG Armoury\common\Macro\
+
+CORSAIR iCUE
+  Where: %appdata%\Corsair\CUE\Config.cuecfg
+
+KROM KOLT
+  Where: %AppData%\Local\VirtualStore\Program Files (x86)\KROM KOLT\Config\sequence.dat
+
+BLACKWEB
+  Where: C:\Blackweb Gaming AP\config\.MA32AIY
+
+YANPOL
+  Where: %appdata%\BYCOMBO-2\Mac\
+
+MOTOSPEED V60
+  Where: C:\Program Files (x86)\MotoSpeed Gaming Mouse\V60\modules\Settings\
+
+AYAX
+  Where: C:\Program Files\AYAX GamingMouse\record.ini
+
+
+????????????????????????????????????????????????????????
+?                10. ADVANCED FORENSICS               ?
+?        AMCACHE, SRUM, VSS, YARA, INDXRIPPER         ?
+????????????????????????????????????????????????????????
+
+AMCACHE
+  Where: C:\Windows\AppCompat\Programs\Amcache.hve
+  What: Program execution database
+  Tool: AmcacheParser
+
+ACTIVITIES CACHE
+  Where: C:\Users\%username%\AppData\Local\ConnectedDevicesPlatform\{ID}\ActivitiesCache.db
+  What: Windows Timeline activity log
+  Tool: WxTCmd
+
+SRUM
+  Where: C:\Windows\System32\sru\SRUDB.dat
+  What: Resource usage history (network, CPU, disk per app)
+  Tool: SrumECmd
+
+VOLUME SHADOW COPIES
+  What: Historical snapshots of entire drive
+  How: vssadmin list shadows
+  Tool: ShadowExplorer
+  Tool: Zimmerman tools with --vss flag
+
+INDXRIPPER ($i30)
+  What: Deleted file metadata from directory indices
+  How: INDXRipper.exe //./C: --deleted-dirs output.csv
+
+YARA
+  What: Pattern-based file/memory scanning
+  Tool: YARA
+  Use: Custom cheat rules
+
+JUMP LISTS
+  Where: %APPDATA%\Microsoft\Windows\Recent\AutomaticDestinations\
+  Where: %APPDATA%\Microsoft\Windows\Recent\CustomDestinations\
+  Tool: JumpList Explorer, LECmd
+

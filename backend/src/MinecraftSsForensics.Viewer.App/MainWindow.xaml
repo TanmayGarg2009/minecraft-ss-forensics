@@ -1,0 +1,357 @@
+<Window x:Class="MinecraftSsForensics.Viewer.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Minecraft SS Forensics — Staff Report Viewer" Height="820" Width="1240"
+        WindowStartupLocation="CenterScreen"
+        Background="#0B0F19" Foreground="#E2E8F0">
+    <Window.Resources>
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#E2E8F0"/>
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="#1E293B"/>
+            <Setter Property="Foreground" Value="#F1F5F9"/>
+            <Setter Property="BorderBrush" Value="#334155"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style TargetType="TabItem">
+            <Setter Property="Background" Value="#0F172A"/>
+            <Setter Property="Foreground" Value="#94A3B8"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="14,8"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/> <!-- Top Bar -->
+            <RowDefinition Height="Auto"/> <!-- Meta & Verdict Card -->
+            <RowDefinition Height="*"/>    <!-- Tabs Content -->
+            <RowDefinition Height="Auto"/> <!-- Status Bar -->
+        </Grid.RowDefinitions>
+
+        <!-- Top Header Bar -->
+        <Border Grid.Row="0" Background="#111827" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="8" Padding="14,10" Margin="0,0,0,12">
+            <DockPanel LastChildFill="False">
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left" VerticalAlignment="Center">
+                    <TextBlock Text="🛡️" FontSize="24" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                    <StackPanel>
+                        <TextBlock Text="Minecraft SS Forensics — Staff Investigation Viewer" FontSize="16" FontWeight="Bold" Foreground="#F8FAFC"/>
+                        <TextBlock Text="Offline-First Forensics • Cryptographic Seal Verification • Multi-Source Correlation" FontSize="11" Foreground="#94A3B8"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
+                    <Button x:Name="BtnOpenReport" Content="📂 Open Report File (.json)" Click="BtnOpenReport_Click" Margin="0,0,8,0" Background="#0284C7" Foreground="White" BorderBrush="#0369A1"/>
+                    <Button x:Name="BtnViewInBrowser" Content="🌐 Open Interactive HTML" Click="BtnViewInBrowser_Click" Margin="0,0,8,0" IsEnabled="False"/>
+                    <Button x:Name="BtnExportMd" Content="📝 Export AI Markdown" Click="BtnExportMd_Click" Margin="0,0,8,0" IsEnabled="False"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Report Overview & Verdict Banner -->
+        <Border Grid.Row="1" Background="#111827" BorderBrush="#1F2937" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,0,12">
+            <StackPanel>
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="TxtReportId" Text="No Report Loaded — Click 'Open Report File' to begin review" FontSize="14" FontWeight="Bold" Foreground="#38BDF8"/>
+                            <TextBlock x:Name="TxtSealStatus" Text="" FontSize="12" FontWeight="SemiBold" Margin="14,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <TextBlock x:Name="TxtReportMeta" Text="Target System: - | Scanned: - | Gamemode Policy: -" FontSize="11" Foreground="#94A3B8" Margin="0,4,0,0"/>
+                    </StackPanel>
+
+                    <!-- Metric Counters -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,6" Margin="4,0">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock x:Name="TxtCountChecks" Text="0" FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" Foreground="#34D399"/>
+                                <TextBlock Text="Checks" FontSize="10" Foreground="#94A3B8"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,6" Margin="4,0">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock x:Name="TxtCountCheats" Text="0" FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" Foreground="#EF4444"/>
+                                <TextBlock Text="Confirmed" FontSize="10" Foreground="#94A3B8"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,6" Margin="4,0">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock x:Name="TxtCountIndicators" Text="0" FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" Foreground="#F59E0B"/>
+                                <TextBlock Text="Indicators" FontSize="10" Foreground="#94A3B8"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,6" Margin="4,0">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock x:Name="TxtCountProhibited" Text="0" FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" Foreground="#F59E0B"/>
+                                <TextBlock Text="Prohibited" FontSize="10" Foreground="#94A3B8"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10,6" Margin="4,0">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock x:Name="TxtCountMods" Text="0" FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" Foreground="#38BDF8"/>
+                                <TextBlock Text="Mods" FontSize="10" Foreground="#94A3B8"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Verdict Banner -->
+                <Border x:Name="BorderVerdict" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="2,0,0,0" CornerRadius="4" Padding="12,8">
+                    <StackPanel>
+                        <TextBlock x:Name="TxtVerdictTitle" Text="AWAITING REPORT FILE" FontSize="14" FontWeight="Bold" Foreground="#94A3B8"/>
+                        <TextBlock x:Name="TxtVerdictDesc" Text="Please open a valid Minecraft SS Forensics JSON report file to inspect forensic findings." FontSize="11" Foreground="#CBD5E1" Margin="0,2,0,0"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <!-- Main Tab Control -->
+        <TabControl Grid.Row="2" Background="#111827" BorderBrush="#1F2937" BorderThickness="1">
+            <!-- TAB 1: Key Findings -->
+            <TabItem Header="🔍 Findings &amp; Evidence">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Filter Toolbar -->
+                    <DockPanel Grid.Row="0" Margin="0,0,0,10">
+                        <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                            <TextBox x:Name="TxtSearchFindings" Width="260" Padding="8,4" Background="#0F172A" Foreground="White" BorderBrush="#334155" TextChanged="TxtSearchFindings_TextChanged" Text="Search findings, files, rules..."/>
+                            <ComboBox x:Name="CmbClassificationFilter" Width="180" Margin="8,0,0,0" SelectionChanged="CmbClassificationFilter_SelectionChanged">
+                                <ComboBoxItem Content="All Classifications" IsSelected="True"/>
+                                <ComboBoxItem Content="Confirmed Cheats"/>
+                                <ComboBoxItem Content="Strong Indicators"/>
+                                <ComboBoxItem Content="Suspicious"/>
+                                <ComboBoxItem Content="Needs Review"/>
+                                <ComboBoxItem Content="Informational"/>
+                            </ComboBox>
+                        </StackPanel>
+                    </DockPanel>
+
+                    <!-- Split View: List on left, details on right -->
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="420"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Findings List -->
+                        <ListBox x:Name="LstFindings" Grid.Column="0" Background="#0F172A" BorderBrush="#1E293B" Margin="0,0,10,0" SelectionChanged="LstFindings_SelectionChanged">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="2" Padding="6" Background="#111827" CornerRadius="4">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding DetectionName}" FontWeight="Bold" FontSize="12" Foreground="#F1F5F9" TextTrimming="CharacterEllipsis"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                <TextBlock Text="{Binding Classification}" FontSize="10" Foreground="#F59E0B" Margin="0,0,8,0"/>
+                                                <TextBlock Text="{Binding SoftwareState}" FontSize="10" Foreground="#94A3B8"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <!-- Selected Finding Detail -->
+                        <Border Grid.Column="1" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="14">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel x:Name="PanelFindingDetail">
+                                    <TextBlock x:Name="TxtDetailTitle" Text="Select a finding to inspect detailed technical evidence" FontSize="14" FontWeight="Bold" Foreground="#38BDF8"/>
+                                    <TextBlock x:Name="TxtDetailMeta" Text="" FontSize="11" Foreground="#94A3B8" Margin="0,2,0,10"/>
+
+                                    <TextBlock Text="TECHNICAL EXPLANATION" FontSize="10" FontWeight="Bold" Foreground="#64748B"/>
+                                    <TextBlock x:Name="TxtDetailExplanation" Text="-" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,10"/>
+
+                                    <TextBlock Text="ARTIFACT LOCATION &amp; HASH" FontSize="10" FontWeight="Bold" Foreground="#64748B"/>
+                                    <TextBlock x:Name="TxtDetailPath" Text="Path: -" FontSize="11" FontFamily="Consolas" TextWrapping="Wrap" Margin="0,2,0,2"/>
+                                    <TextBlock x:Name="TxtDetailHash" Text="SHA-256: -" FontSize="11" FontFamily="Consolas" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                                    <TextBlock Text="WHAT IS PROVEN" FontSize="10" FontWeight="Bold" Foreground="#34D399"/>
+                                    <TextBlock x:Name="TxtDetailProven" Text="-" FontSize="12" Foreground="#A7F3D0" TextWrapping="Wrap" Margin="0,2,0,10"/>
+
+                                    <TextBlock Text="WHAT THIS DOES NOT PROVE" FontSize="10" FontWeight="Bold" Foreground="#F87171"/>
+                                    <TextBlock x:Name="TxtDetailNotProven" Text="-" FontSize="12" Foreground="#FECACA" TextWrapping="Wrap" Margin="0,2,0,10"/>
+
+                                    <TextBlock Text="WHY THIS INDICATOR MATTERS" FontSize="10" FontWeight="Bold" Foreground="#64748B"/>
+                                    <TextBlock x:Name="TxtDetailWhyMatters" Text="-" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,10"/>
+
+                                    <TextBlock Text="ALTERNATIVE LEGITIMATE HYPOTHESES" FontSize="10" FontWeight="Bold" Foreground="#64748B"/>
+                                    <TextBlock x:Name="TxtDetailAlternative" Text="-" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,10"/>
+
+                                    <TextBlock Text="EVIDENTIARY LIMITATIONS" FontSize="10" FontWeight="Bold" Foreground="#64748B"/>
+                                    <TextBlock x:Name="TxtDetailLimitations" Text="-" FontSize="12" Foreground="#94A3B8" TextWrapping="Wrap" Margin="0,2,0,10"/>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- TAB 2: Multi-Source Evidence Correlation -->
+            <TabItem Header="🔗 Evidence Correlation (6 Software States)">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,10">
+                        <TextBlock Text="Evidentiary Principle: Strictly distinguishes 6 software states: 1. Present on Disk, 2. Installed in Profile, 3. Executed Historically, 4. Active During Session, 5. Interacting with Process Memory, 6. Prohibited Functionality Used in Game. Possession-based server policies enforce violations upon confirmed presence/installation without requiring active in-game execution."
+                                   FontSize="11" Foreground="#94A3B8" TextWrapping="Wrap"/>
+                    </Border>
+
+                    <DataGrid x:Name="GridCorrelation" Grid.Row="1" Background="#0F172A" AutoGenerateColumns="False" IsReadOnly="True" GridLinesVisibility="Horizontal" HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Software / Artifact" Binding="{Binding SoftwareName}" Width="160"/>
+                            <DataGridTextColumn Header="Assessed State" Binding="{Binding State}" Width="180"/>
+                            <DataGridTextColumn Header="Policy Scope" Binding="{Binding Policy}" Width="140"/>
+                            <DataGridCheckBoxColumn Header="Policy Violation?" Binding="{Binding IsPolicyViolation}" Width="110"/>
+                            <DataGridTextColumn Header="State Description" Binding="{Binding StateDescription}" Width="280"/>
+                            <DataGridTextColumn Header="Proven Facts" Binding="{Binding WhatIsProven}" Width="240"/>
+                            <DataGridTextColumn Header="Limitations / Not Proven" Binding="{Binding WhatIsNotProven}" Width="240"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+
+            <!-- TAB 3: Mod Inventory & Bytecode Capabilities -->
+            <TabItem Header="📦 Mod Inventory">
+                <Grid Margin="12">
+                    <DataGrid x:Name="GridMods" Background="#0F172A" AutoGenerateColumns="False" IsReadOnly="True" GridLinesVisibility="Horizontal" HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Mod Name" Binding="{Binding Name}" Width="160"/>
+                            <DataGridTextColumn Header="File Name" Binding="{Binding FileName}" Width="180"/>
+                            <DataGridCheckBoxColumn Header="Verified Release" Binding="{Binding Verified}" Width="100"/>
+                            <DataGridTextColumn Header="Verification State" Binding="{Binding VerificationState}" Width="150"/>
+                            <DataGridTextColumn Header="Gameplay Policy" Binding="{Binding GameplayPolicy}" Width="140"/>
+                            <DataGridTextColumn Header="Policy Reason" Binding="{Binding PolicyReason}" Width="260"/>
+                            <DataGridTextColumn Header="SHA-256 Hash" Binding="{Binding Sha256}" Width="220"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+
+            <!-- TAB 4: Services & Drivers -->
+            <TabItem Header="⚙️ Services &amp; Drivers">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,10">
+                        <TextBlock Text="Architectural Disclosure: Non-invasive user-mode audit of HKLM Services registry, Event ID 7045, and SetupAPI.dev.log. Flags non-standard kernel drivers, user-writable directory paths, and unsigned binaries. Note: User-mode scans cannot guarantee detection of kernel-hidden rootkits (DKOM) without signed driver telemetry."
+                                   FontSize="11" Foreground="#94A3B8" TextWrapping="Wrap"/>
+                    </Border>
+
+                    <DataGrid x:Name="GridServices" Grid.Row="1" Background="#0F172A" AutoGenerateColumns="False" IsReadOnly="True" GridLinesVisibility="Horizontal" HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="140"/>
+                            <DataGridTextColumn Header="Display Name" Binding="{Binding DisplayName}" Width="180"/>
+                            <DataGridCheckBoxColumn Header="Driver?" Binding="{Binding IsDriver}" Width="70"/>
+                            <DataGridCheckBoxColumn Header="User Directory?" Binding="{Binding IsInUserDirectory}" Width="110"/>
+                            <DataGridCheckBoxColumn Header="Signed?" Binding="{Binding IsSigned}" Width="70"/>
+                            <DataGridTextColumn Header="Signer Subject" Binding="{Binding SignerSubject}" Width="180"/>
+                            <DataGridTextColumn Header="Image Path" Binding="{Binding ImagePath}" Width="280"/>
+                            <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="120"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+
+            <!-- TAB 5: Runtime & Modules -->
+            <TabItem Header="🧠 Memory &amp; Processes">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Margin="0,0,0,8">
+                        <TextBlock Text="RUNNING PROCESSES &amp; INJECTED MODULES" FontSize="12" FontWeight="Bold" Foreground="#38BDF8"/>
+                    </StackPanel>
+
+                    <DataGrid x:Name="GridModules" Grid.Row="1" Background="#0F172A" AutoGenerateColumns="False" IsReadOnly="True" GridLinesVisibility="Horizontal" HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Module Name" Binding="{Binding ModuleName}" Width="160"/>
+                            <DataGridTextColumn Header="PID" Binding="{Binding ProcessId}" Width="60"/>
+                            <DataGridCheckBoxColumn Header="Temp Dir?" Binding="{Binding IsInTempDirectory}" Width="80"/>
+                            <DataGridCheckBoxColumn Header="Legitimate Java Lib?" Binding="{Binding IsRecognizedJavaNativeLibrary}" Width="130"/>
+                            <DataGridTextColumn Header="Provenance Assessment" Binding="{Binding ProvenanceAssessment}" Width="240"/>
+                            <DataGridTextColumn Header="Path" Binding="{Binding FilePath}" Width="320"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+
+            <!-- TAB 6: Execution & File History -->
+            <TabItem Header="🕒 History &amp; Files">
+                <Grid Margin="12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Top: Execution History -->
+                    <GroupBox Grid.Row="0" Header="Windows Execution History (Prefetch, BAM, PCA)" Foreground="#94A3B8" Margin="0,0,0,8">
+                        <DataGrid x:Name="GridExecHistory" Background="#0F172A" AutoGenerateColumns="False" IsReadOnly="True" GridLinesVisibility="Horizontal" HeadersVisibility="Column">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="100"/>
+                                <DataGridTextColumn Header="Application Name" Binding="{Binding ApplicationName}" Width="180"/>
+                                <DataGridTextColumn Header="Last Execution Time (UTC)" Binding="{Binding LastExecutionTime}" Width="160"/>
+                                <DataGridTextColumn Header="Application Path" Binding="{Binding ApplicationPath}" Width="320"/>
+                                <DataGridTextColumn Header="Details" Binding="{Binding Details}" Width="220"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </GroupBox>
+
+                    <!-- Bottom: Discovered Files -->
+                    <GroupBox Grid.Row="1" Header="Staged Files in Downloads, Desktop, Temp, &amp; $Recycle.Bin" Foreground="#94A3B8">
+                        <DataGrid x:Name="GridDiscoveries" Background="#0F172A" AutoGenerateColumns="False" IsReadOnly="True" GridLinesVisibility="Horizontal" HeadersVisibility="Column">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="File Name" Binding="{Binding FileName}" Width="180"/>
+                                <DataGridTextColumn Header="Category" Binding="{Binding DiscoveryCategory}" Width="120"/>
+                                <DataGridTextColumn Header="Size (Bytes)" Binding="{Binding FileSizeBytes}" Width="90"/>
+                                <DataGridTextColumn Header="File Path" Binding="{Binding FilePath}" Width="320"/>
+                                <DataGridTextColumn Header="SHA-256" Binding="{Binding Sha256}" Width="240"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </GroupBox>
+                </Grid>
+            </TabItem>
+
+            <!-- TAB 7: Diagnostic Checks -->
+            <TabItem Header="🩺 Diagnostics">
+                <Grid Margin="12">
+                    <DataGrid x:Name="GridDiagnostics" Background="#0F172A" AutoGenerateColumns="False" IsReadOnly="True" GridLinesVisibility="Horizontal" HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Check Name" Binding="{Binding CheckName}" Width="180"/>
+                            <DataGridTextColumn Header="Source" Binding="{Binding Source}" Width="140"/>
+                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100"/>
+                            <DataGridTextColumn Header="Reason / Details" Binding="{Binding Reason}" Width="500"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+        </TabControl>
+
+        <!-- Status Bar -->
+        <Border Grid.Row="3" Background="#0F172A" BorderBrush="#1E293B" BorderThickness="0,1,0,0" Padding="10,6" Margin="0,10,0,0">
+            <TextBlock x:Name="TxtStatusBar" Text="Ready. Open a report file (.json) to inspect findings." FontSize="11" Foreground="#94A3B8"/>
+        </Border>
+    </Grid>
+</Window>

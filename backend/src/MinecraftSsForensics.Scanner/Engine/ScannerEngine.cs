@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
-using MinecraftSsForensics.Api.Models.Domain;
-using MinecraftSsForensics.Api.Models.Dtos.Ingestion;
+using MinecraftSsForensics.Scanner.Models;
+using MinecraftSsForensics.Scanner.Models.Legacy;
 using MinecraftSsForensics.Scanner.Archive;
 using MinecraftSsForensics.Scanner.Hashing;
 using MinecraftSsForensics.Scanner.LogsAndHistory;

@@ -1,4 +1,9 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using Microsoft.Win32;
+using MinecraftSsForensics.Scanner.Cheats;
 
 namespace MinecraftSsForensics.Scanner.LogsAndHistory;
 
@@ -50,25 +55,73 @@ public class HistoricalEvidenceScanner
             });
         }
 
-        // 2. Windows Prefetch Inspection (Read-Only)
+        // 2. Windows Prefetch Inspection & Tampering Check
+        if (OperatingSystem.IsWindows())
+        {
+            CheckPrefetchConfiguration(records);
+            ScanPrefetchDirectory(records);
+            ScanBamRegistry(records);
+            ScanPowerShellHistory(records);
+        }
+
+        return records;
+    }
+
+    private void CheckPrefetchConfiguration(List<HistoricalArtifactRecord> records)
+    {
+        try
+        {
+            using var pfKey = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters");
+            if (pfKey != null)
+            {
+                var val = pfKey.GetValue("EnablePrefetcher");
+                if (val is int intVal && intVal == 0)
+                {
+                    records.Add(new HistoricalArtifactRecord
+                    {
+                        Source = "PrefetchConfig",
+                        Path = @"HKLM\...\PrefetchParameters\EnablePrefetcher",
+                        Description = "Windows Prefetcher is explicitly DISABLED (EnablePrefetcher = 0). Potential anti-screenshare evasion or system optimizer tweak.",
+                        IsDeletedIndicator = true
+                    });
+                }
+            }
+        }
+        catch { /* Non-fatal access restriction */ }
+    }
+
+    private void ScanPrefetchDirectory(List<HistoricalArtifactRecord> records)
+    {
         string prefetchDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Prefetch");
         try
         {
             if (Directory.Exists(prefetchDir))
             {
-                // Look for javaw.exe or known cheat binary prefetch files
-                var pfFiles = Directory.GetFiles(prefetchDir, "*JAVA*.pf", SearchOption.TopDirectoryOnly);
+                var dirInfo = new DirectoryInfo(prefetchDir);
+                var pfFiles = dirInfo.GetFiles("*.pf", SearchOption.TopDirectoryOnly);
+
                 foreach (var pf in pfFiles)
                 {
-                    var fi = new FileInfo(pf);
-                    records.Add(new HistoricalArtifactRecord
+                    string nameUpper = pf.Name.ToUpperInvariant();
+                    bool isJava = nameUpper.Contains("JAVA");
+
+                    // Check if prefetch file matches any known cheat signature
+                    var cheatMatch = CheatDetectionDatabase.Signatures.FirstOrDefault(s =>
+                        s.KnownFileNames.Any(k => nameUpper.StartsWith(Path.GetFileNameWithoutExtension(k).ToUpperInvariant())));
+
+                    if (isJava || cheatMatch != null)
                     {
-                        Source = "Prefetch",
-                        Path = pf,
-                        Description = $"Windows Prefetch execution record: {Path.GetFileName(pf)}",
-                        Timestamp = fi.LastWriteTimeUtc,
-                        IsDeletedIndicator = false
-                    });
+                        records.Add(new HistoricalArtifactRecord
+                        {
+                            Source = "Prefetch",
+                            Path = pf.FullName,
+                            Description = cheatMatch != null
+                                ? $"Windows Prefetch execution record matching known cheat: {cheatMatch.Name} ({pf.Name})"
+                                : $"Windows Prefetch execution record: {pf.Name}",
+                            Timestamp = pf.LastWriteTimeUtc,
+                            IsDeletedIndicator = false
+                        });
+                    }
                 }
             }
             else
@@ -99,45 +152,106 @@ public class HistoricalEvidenceScanner
                 LimitationNote = $"Prefetch collection error: {ex.Message}"
             });
         }
+    }
 
-        // 3. Background Activity Moderator (BAM) Registry Check (Read-Only)
-        if (OperatingSystem.IsWindows())
+    private void ScanBamRegistry(List<HistoricalArtifactRecord> records)
+    {
+        try
         {
-            try
+            // Inspect BAM (Background Activity Moderator) and DAM (Desktop Activity Moderator)
+            string[] moderatorKeys = { @"SYSTEM\CurrentControlSet\Services\bam\State\UserSettings", @"SYSTEM\CurrentControlSet\Services\dam\State\UserSettings" };
+
+            foreach (var rootPath in moderatorKeys)
             {
-                using var bamKey = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\bam\State\UserSettings");
-                if (bamKey != null)
+                using var rootKey = Registry.LocalMachine.OpenSubKey(rootPath);
+                if (rootKey == null) continue;
+
+                foreach (string sid in rootKey.GetSubKeyNames())
                 {
-                    // If accessible, check subkeys
-                    var subkeys = bamKey.GetSubKeyNames();
-                    records.Add(new HistoricalArtifactRecord
+                    try
                     {
-                        Source = "BamDam",
-                        Description = $"BAM UserSettings registry root accessed successfully ({subkeys.Length} user profiles found).",
-                        HasAccessDenied = false
-                    });
+                        using var sidKey = rootKey.OpenSubKey(sid);
+                        if (sidKey == null) continue;
+
+                        foreach (string valName in sidKey.GetValueNames())
+                        {
+                            if (string.IsNullOrWhiteSpace(valName)) continue;
+
+                            // BAM stores executable path as value name and 8-byte FILETIME as value data
+                            DateTime? executionTime = null;
+                            if (sidKey.GetValue(valName) is byte[] bytes && bytes.Length >= 8)
+                            {
+                                try
+                                {
+                                    long fileTime = BitConverter.ToInt64(bytes, 0);
+                                    if (fileTime > 0)
+                                    {
+                                        executionTime = DateTime.FromFileTimeUtc(fileTime);
+                                    }
+                                }
+                                catch { }
+                            }
+
+                            string upperName = valName.ToUpperInvariant();
+                            var cheatMatch = CheatDetectionDatabase.Signatures.FirstOrDefault(s =>
+                                s.KnownFileNames.Any(k => upperName.Contains(Path.GetFileNameWithoutExtension(k).ToUpperInvariant())));
+
+                            if (cheatMatch != null || upperName.Contains("JAVA") || upperName.Contains("MINECRAFT") || upperName.Contains(@"\TEMP\"))
+                            {
+                                records.Add(new HistoricalArtifactRecord
+                                {
+                                    Source = rootPath.Contains("bam") ? "WindowsBAM" : "WindowsDAM",
+                                    Path = valName,
+                                    Description = cheatMatch != null
+                                        ? $"BAM execution record matching known cheat '{cheatMatch.Name}': {valName}"
+                                        : $"BAM execution record: {Path.GetFileName(valName)}",
+                                    Timestamp = executionTime,
+                                    IsDeletedIndicator = false
+                                });
+                            }
+                        }
+                    }
+                    catch { /* Restricted SID subkey */ }
                 }
-                else
-                {
-                    records.Add(new HistoricalArtifactRecord
-                    {
-                        Source = "BamDam",
-                        HasAccessDenied = true,
-                        LimitationNote = "BAM registry hive key returned null or is protected by Windows ACLs."
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                records.Add(new HistoricalArtifactRecord
-                {
-                    Source = "BamDam",
-                    HasAccessDenied = true,
-                    LimitationNote = $"BAM registry access restricted in user mode: {ex.Message}"
-                });
             }
         }
+        catch (Exception ex)
+        {
+            records.Add(new HistoricalArtifactRecord
+            {
+                Source = "BamDam",
+                HasAccessDenied = true,
+                LimitationNote = $"BAM/DAM registry access restricted in user mode: {ex.Message}"
+            });
+        }
+    }
 
-        return records;
+    private void ScanPowerShellHistory(List<HistoricalArtifactRecord> records)
+    {
+        try
+        {
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string psHistoryPath = Path.Combine(appData, @"Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt");
+
+            if (File.Exists(psHistoryPath))
+            {
+                var lines = File.ReadAllLines(psHistoryPath);
+                foreach (var line in lines.TakeLast(100))
+                {
+                    string lower = line.ToLowerInvariant();
+                    if (lower.Contains("fsutil") || lower.Contains("deletejournal") || lower.Contains("wevtutil") || lower.Contains("vape") || lower.Contains("slinky") || lower.Contains("doomsday"))
+                    {
+                        records.Add(new HistoricalArtifactRecord
+                        {
+                            Source = "PowerShellHistory",
+                            Path = psHistoryPath,
+                            Description = $"PowerShell history entry: {line.Trim()}",
+                            IsDeletedIndicator = lower.Contains("delete") || lower.Contains("cl")
+                        });
+                    }
+                }
+            }
+        }
+        catch { /* Non-fatal */ }
     }
 }

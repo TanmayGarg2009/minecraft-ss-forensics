@@ -30,6 +30,7 @@ public class ModPolicyRule
     /// Plain-language reason for why this mod is allowed, prohibited, or restricted under this policy.
     /// </summary>
     public string PolicyReason { get; set; } = string.Empty;
+    public string Reason { get => PolicyReason; set => PolicyReason = value; }
 
     /// <summary>
     /// Any conditions for restricted mods (e.g., "Allowed only if entity radar is disabled").

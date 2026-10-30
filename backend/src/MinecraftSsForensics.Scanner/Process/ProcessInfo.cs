@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace MinecraftSsForensics.Scanner.Process;
 
 public class DiscoveredProcess
@@ -5,6 +8,8 @@ public class DiscoveredProcess
     public int ProcessId { get; set; }
     public string ProcessName { get; set; } = string.Empty;
     public string? ExecutablePath { get; set; }
+    public int? ParentProcessId { get; set; }
+    public string? ParentProcessName { get; set; }
     public DateTime? StartTime { get; set; }
     public string? RedactedCommandLine { get; set; }
     public string? JavaVersion { get; set; }
@@ -25,4 +30,11 @@ public class LoadedModuleInfo
     public string? SignerSubject { get; set; }
     public bool IsStandardSystemModule { get; set; }
     public bool IsSuspiciousLocation { get; set; }
+
+    /// <summary>
+    /// Distinguishes legitimate Java native library extraction (JNA, LWJGL, OpenAL)
+    /// from unauthorized process injection into javaw.exe.
+    /// </summary>
+    public bool IsRecognizedJavaNativeLibrary { get; set; }
+    public string ProvenanceAssessment { get; set; } = "Standard system module";
 }

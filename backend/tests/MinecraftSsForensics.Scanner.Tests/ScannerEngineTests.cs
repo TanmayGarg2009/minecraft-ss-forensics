@@ -1,7 +1,6 @@
 using System.IO.Compression;
-using MinecraftSsForensics.Api.Models.Domain;
-using MinecraftSsForensics.Api.Validation;
 using MinecraftSsForensics.Scanner.Engine;
+using MinecraftSsForensics.Scanner.Models.Legacy;
 using MinecraftSsForensics.Scanner.Verification;
 using Xunit;
 
@@ -75,12 +74,6 @@ public class ScannerEngineTests
             Assert.Contains(report.DetectedLoaders, l => l.Contains("Fabric"));
             Assert.NotNull(report.CollectionCoverage);
             Assert.True(report.CollectionCoverage.TotalChecks > 0);
-
-            // Execute backend validator to guarantee 100% API schema compatibility
-            var validator = new ReportSubmissionValidator();
-            var validationResult = await validator.ValidateAsync(report);
-
-            Assert.True(validationResult.IsValid, string.Join("; ", validationResult.Errors.Select(e => e.ErrorMessage)));
         }
         finally
         {

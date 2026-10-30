@@ -1,4 +1,3 @@
-using MinecraftSsForensics.Api.Models.Domain;
 using MinecraftSsForensics.Scanner.Archive;
 using MinecraftSsForensics.Scanner.Hashing;
 using MinecraftSsForensics.Scanner.Policy;

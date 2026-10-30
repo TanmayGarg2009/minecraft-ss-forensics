@@ -1,94 +1,86 @@
-# System Architecture — Stage 1
+# System Architecture — Standalone Windows Forensic Suite
 
 ## Overview
-Minecraft Screenshare (SS) Forensics is a consent-based, high-integrity reporting system designed for Minecraft anti-cheat investigations and competitive verification. Stage 1 implements the backend ingestion API, relational database models, cryptographic bearer-link access engine, raw evidence abstraction, and browser dashboard viewer.
+Minecraft Screenshare (SS) Forensics is a consent-based, high-integrity forensic investigation suite designed for Minecraft anti-cheat investigations and competitive verification. The suite is engineered as a **100% standalone Windows application**, eliminating all reliance on backend web servers, hosted databases, cloud APIs, and user accounts.
 
 ```mermaid
 flowchart TD
-    subgraph FutureAgent["Stage 2: Windows Native Scanner"]
-        EXE["Scanner Executable (Win 10/11)"]
-        Consent["Explicit Player Consent (v1.0)"]
+    subgraph HostSystem["Player Windows PC"]
+        App["MinecraftSsForensics.exe"]
+        ConsentUI["Consent Scope Gate (Sensitive Categories Opt-In)"]
+
+        subgraph CoreEngine["Forensic Collection Engine"]
+            Locator["Installation Locator (Vanilla, Prism, Modrinth, Lunar)"]
+            Hasher["Streaming File Hasher (SHA-256, SHA-512, Murmur2)"]
+            Archive["Safe Archive Inspector (ZipBomb Guard + Bytecode)"]
+            Verifier["Multi-Platform Mod Verifier (Modrinth, Curse, GitHub)"]
+            Policy["Mod Policy Engine (Authenticity vs Gameplay Policy)"]
+            ProcScan["Process Scanner (javaw.exe + JNA Provenance)"]
+            HistScan["Historical Evidence (Prefetch, BAM, PCA)"]
+            RegScan["Registry Forensics (UserAssist ROT13, Run Keys)"]
+            UsbScan["USBSTOR Flash Device Enumeration"]
+            BrowserScan["Sensitive Cheat Domain Auditor (Opt-In)"]
+            FileScan["Filesystem Staging ($Recycle.Bin, Downloads, Temp)"]
+        end
+
+        subgraph OutputLayer["Sealed Export Subsystem"]
+            Seal["SHA-256 Cryptographic Report Seal"]
+            JsonOut["Portable Forensic JSON (.json)"]
+            HtmlOut["Self-Contained Interactive HTML (.html)"]
+            MdOut["AI Diagnostic Markdown (.md)"]
+        end
     end
 
-    subgraph BackendAPI["Stage 1: ASP.NET Core 8 Web API"]
-        RateLimit["Rate Limiting & Size Gate (15MB max)"]
-        Validator["Strict Schema & XSS Validator"]
-        ReportSvc["Report Ingestion Service"]
-        IdGen["144-bit Cryptographic ID Generator"]
-        Hmac["HMAC-SHA256 Deletion Key Hasher"]
-        CleanupService["Background Retention Purge (Hourly)"]
+    subgraph StaffReview["Staff Review Workflow"]
+        StaffApp["MinecraftSsForensics.exe (Staff Viewer Mode)"]
+        Browser["Standard Web Browser (Offline HTML)"]
     end
 
-    subgraph DataStore["Data & Evidence Storage"]
-        DB[("PostgreSQL / SQLite (EF Core)")]
-        Disk[("Abstract Evidence Store (App_Data / S3)")]
-    end
+    App --> ConsentUI
+    ConsentUI --> CoreEngine
+    Locator --> CoreEngine
+    Hasher --> Verifier
+    Archive --> Verifier
+    Verifier --> Policy
+    ProcScan --> CoreEngine
+    HistScan --> CoreEngine
+    RegScan --> CoreEngine
+    UsbScan --> CoreEngine
+    BrowserScan --> CoreEngine
+    FileScan --> CoreEngine
 
-    subgraph Dashboard["Stage 1: React 18 + Vite Report Viewer"]
-        Staff["Server Staff / Anti-Cheat Teams"]
-        Viewer["Browser Report Viewer (Bearer URL)"]
-        DeleteFlow["Player Deletion Portal"]
-    end
+    CoreEngine --> Seal
+    Seal --> JsonOut
+    Seal --> HtmlOut
+    Seal --> MdOut
 
-    EXE -->|1. Submit JSON Payload| RateLimit
-    RateLimit --> Validator
-    Validator --> ReportSvc
-    ReportSvc --> IdGen
-    ReportSvc --> Hmac
-    ReportSvc --> DB
-    ReportSvc --> Disk
-    ReportSvc -->|2. Return Share URL & Deletion Key| EXE
-    EXE -->|3. Player sends share URL to staff| Staff
-    Staff -->|4. Access /report/mc_... (No Login)| Viewer
-    Viewer -->|5. Query Public Report| BackendAPI
-    EXE -.->|6. Optional Player Deletion| DeleteFlow
-    DeleteFlow -->|7. DELETE with DeletionKey| BackendAPI
-    CleanupService -->|8. Automatic Expired Report Purge| DB
-    CleanupService -->|8. Remove Expired Raw Evidence| Disk
+    JsonOut -->|File Transfer via Discord / Ticket| StaffApp
+    HtmlOut -->|Direct Double-Click| Browser
+    StaffApp -->|Verify SHA-256 Seal & Inspect Evidence| StaffApp
 ```
 
 ---
 
 ## Architectural Principles & Boundaries
 
-### 1. Ingestion Boundary
-- The scanner client communicates with the backend solely over HTTPS via the REST contract defined in `docs/stage-2-agent-contract.md`.
-- No client-controlled arbitrary file paths are used on the server filesystem.
-- All requests are checked for:
-  - Max body size: 15 MB.
-  - Allowed schema version: `1.0.0`.
-  - Player consent confirmation: `ConsentConfirmation.ConsentGiven == true`. Submissions without consent are strictly rejected (HTTP 400).
-  - Cross-Site Scripting (XSS) prevention: strings containing executable script tokens (`<script>`, `javascript:`, event handlers) are rejected.
-  - Strict enum validation for severities, categories, and confidence levels.
+### 1. Offline-First & Zero-Server Dependency
+- The application executes completely offline. Network connectivity is optional and utilized strictly for querying official mod repositories (Modrinth, CurseForge, GitHub) if the player consents to online mod verification.
+- No telemetry, analytics, crash reports, or user information are ever transmitted to any third-party server.
 
-### 2. Bearer-Link Access Model
-- Reports are publicly accessible to anyone possessing the complete unguessable identifier URL (`/report/mc_<random144bit>`).
-- No staff accounts or authentication walls are required for Stage 1. This prevents account management overhead, session hijacking, or database credential leaks during time-critical investigations.
-- **Privacy Protections**:
-  - URLs cannot be enumerated (144-bit entropy using cryptographically secure random number generators).
-  - Report responses set `Cache-Control: no-store, no-cache, must-revalidate` to avoid proxy caching.
-  - Automatic expiration (default 7 days, configurable up to 30 days) ensures reports do not linger indefinitely.
-  - Full reports and evidence bodies are excluded from server operational logs.
+### 2. Explicit Player Consent Scope
+- The scanner requires affirmative player consent before collecting forensic artifacts.
+- Sensitive categories—specifically local web browser history—are **explicitly optional** and require active player opt-in.
+- Search queries, cookies, session credentials, passwords, and personal web history are strictly excluded by architectural design.
 
-### 3. Deletion Credential Security
-- When a report is ingested, a 256-bit secret `DeletionKey` (e.g. `del_<64hex>`) is generated.
-- The plaintext `DeletionKey` is returned **only once** in the ingestion response to the submitting scanner.
-- The server stores only an HMAC-SHA256 hash of this key computed with a server-side salt.
-- Neither the deletion key nor its hash is ever included in the public GET report response or shareable URL.
-- When deleting a report, constant-time comparison (`CryptographicOperations.FixedTimeEquals`) is used to resist timing side-channel attacks.
+### 3. Read-Only Safety Standard
+- The scanner operates in non-invasive, read-only mode.
+- The tool never alters files, registers startup hooks, injects code into target processes, or modifies registry settings.
 
-### 4. Storage Abstraction
-- **Structured Data**: Report metadata, findings, timeline events, and diagnostic records are modeled in Entity Framework Core and stored in PostgreSQL in production, with SQLite supported for zero-dependency local development and automated testing.
-- **Raw Evidence Payloads**: Large raw dumps (Prefetch headers, USN journal slices, loaded module lists) are abstracted behind `IStorageService`. The Stage 1 implementation writes to a sanitized local directory with path-traversal prevention. This abstraction can be swapped with AWS S3, Azure Blob, or MinIO without modifying the domain layer.
+### 4. Mathematical Cryptographic Seal
+- Every report generated by the engine includes an embedded SHA-256 cryptographic seal calculated over normalized report properties.
+- When staff imports a `.json` report into the viewer, the integrity seal is recalculated and validated. If any finding, mod entry, or metric was edited in a text editor, the viewer immediately flags the file as tampered.
 
----
-
-## Component Separation
-
-| Component | Technology | Responsibility |
-| :--- | :--- | :--- |
-| **Backend API** | ASP.NET Core 8 Web API (C#) | Ingestion validation, rate limiting, cryptographic token generation, evidence storage, query endpoints, security middleware, and background retention cleanup. |
-| **Database** | PostgreSQL (EF Core / Npgsql) + SQLite | Relational schema, indices on `PublicId`, cascade deletion of report children, expiration queries. |
-| **Storage Abstraction** | `IStorageService` (LocalEvidenceStorageService) | Path-traversal-safe storage of raw forensic text dumps and structured logs. |
-| **Frontend Viewer** | React 18, TypeScript, Vite, Tailwind CSS | High-density forensic dashboard, multi-axis search and filter, timeline visualization, print stylesheet, JSON export, and deletion workflow. |
-| **Demo Laboratory** | React Synthetic Presets | Embedded sandbox with realistic synthetic scenarios (Clean Player, Autoclicker/USN, Process Injection) for testing without a physical Windows scanner. |
+### 5. False-Positive Mitigation by Design
+- **Java Native Extraction**: Distinguishes legitimate native library extractions (JNA, LWJGL, OpenAL, JInput) from unauthorized DLL injection into `javaw.exe`.
+- **Authenticity vs. Policy**: Strictly separates whether an artifact is authentic (signed/published) from whether it is permissible under the server's gamemode ruleset.
+- **Contextual Transparency**: Findings provide both `WhatIsProven` and `WhatIsNotProven`, as well as plausible alternative legitimate explanations.

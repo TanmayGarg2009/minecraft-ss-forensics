@@ -11,8 +11,6 @@
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.11" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.11" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
@@ -24,7 +22,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\MinecraftSsForensics.Scanner\MinecraftSsForensics.Scanner.csproj" />
-    <ProjectReference Include="..\..\src\MinecraftSsForensics.Api\MinecraftSsForensics.Api.csproj" />
   </ItemGroup>
 
 </Project>

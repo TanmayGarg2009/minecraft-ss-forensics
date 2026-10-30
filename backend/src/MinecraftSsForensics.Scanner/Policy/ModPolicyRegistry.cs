@@ -208,8 +208,21 @@ public class ModPolicyRegistry
 
     private void RegisterInternal(ServerGamemodePolicy policy)
     {
+        policy.IsExamplePolicy = true;
+        if (string.IsNullOrEmpty(policy.Publisher) || policy.Publisher == "Example Competition League")
+        {
+            policy.Publisher = "PhoenixMC Reference Policy (Example Only - Not Official Server Rules)";
+        }
+
         _policies[policy.PolicyId] = policy;
         _policies[policy.Gamemode] = policy;
+
+        // Support both full names (Sword PvP) and concise names (Sword, Axe, Pot)
+        if (policy.Gamemode.EndsWith(" PvP", StringComparison.OrdinalIgnoreCase))
+        {
+            string shortName = policy.Gamemode[..^4].Trim();
+            _policies[shortName] = policy;
+        }
     }
 
     // -------------------------------------------------------------
@@ -308,9 +321,9 @@ public class ModPolicyRegistry
             {
                 RuleId = "RULE-BARITONE",
                 ModName = "Baritone",
-                Policy = GameplayPolicy.PROHIBITED,
+                Policy = GameplayPolicy.PROHIBITED_POSSESSION,
                 Behavior = BehaviorCategory.AutomatedCombatActions,
-                PolicyReason = "Automated pathfinding, automated combat, and mining bot routines.",
+                PolicyReason = "Possession of automated pathfinding, combat bot, and mining routines is strictly prohibited.",
                 ProjectIds = new() { "baritone" },
                 ModIds = new() { "baritone", "baritone-api" },
                 Aliases = new() { "baritone" }
@@ -319,9 +332,9 @@ public class ModPolicyRegistry
             {
                 RuleId = "RULE-XRAY",
                 ModName = "X-Ray Mod",
-                Policy = GameplayPolicy.PROHIBITED,
+                Policy = GameplayPolicy.PROHIBITED_POSSESSION,
                 Behavior = BehaviorCategory.HiddenInformationAdvantages,
-                PolicyReason = "Renders hidden ores, caves, and blocks through terrain.",
+                PolicyReason = "Possession of ore, cave, and block x-ray renderers is strictly prohibited.",
                 ProjectIds = new() { "xray", "advanced-xray", "xray-fabric" },
                 ModIds = new() { "xray", "advancedxray", "xrayfabric" },
                 Aliases = new() { "xray", "x-ray" }
@@ -330,9 +343,9 @@ public class ModPolicyRegistry
             {
                 RuleId = "RULE-METEOR",
                 ModName = "Meteor Client",
-                Policy = GameplayPolicy.PROHIBITED,
+                Policy = GameplayPolicy.PROHIBITED_POSSESSION,
                 Behavior = BehaviorCategory.ProhibitedClientModification,
-                PolicyReason = "Prohibited utility/cheat client incorporating combat, movement, and render automation.",
+                PolicyReason = "Possession of combat, movement, and render automation utility client is strictly prohibited.",
                 ProjectIds = new() { "meteor-client" },
                 ModIds = new() { "meteor-client" },
                 Aliases = new() { "meteor" }
@@ -341,9 +354,9 @@ public class ModPolicyRegistry
             {
                 RuleId = "RULE-WURST",
                 ModName = "Wurst Client",
-                Policy = GameplayPolicy.PROHIBITED,
+                Policy = GameplayPolicy.PROHIBITED_POSSESSION,
                 Behavior = BehaviorCategory.ProhibitedClientModification,
-                PolicyReason = "Prohibited hacked client incorporating automated combat and movement modifications.",
+                PolicyReason = "Possession of hacked client incorporating combat and movement modifications is strictly prohibited.",
                 ProjectIds = new() { "wurst-client" },
                 ModIds = new() { "wurst" },
                 Aliases = new() { "wurst" }
@@ -352,9 +365,9 @@ public class ModPolicyRegistry
             {
                 RuleId = "RULE-ARISTOIS",
                 ModName = "Aristois Client",
-                Policy = GameplayPolicy.PROHIBITED,
+                Policy = GameplayPolicy.PROHIBITED_POSSESSION,
                 Behavior = BehaviorCategory.ProhibitedClientModification,
-                PolicyReason = "Prohibited utility/cheat client with automated gameplay modifications.",
+                PolicyReason = "Possession of utility/cheat client with automated gameplay modifications is strictly prohibited.",
                 ProjectIds = new() { "aristois" },
                 ModIds = new() { "aristois" },
                 Aliases = new() { "aristois" }
