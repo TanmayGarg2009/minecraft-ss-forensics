@@ -1,76 +1,48 @@
-# Troubleshooting & Frequently Asked Questions (FAQ)
+# Troubleshooting & Frequently Asked Questions
 
-This guide covers common operational questions, Windows security warnings, and diagnostic scenarios encountered when running **Minecraft SS Forensics**.
+This guide addresses common issues encountered by players running scans and staff reviewing reports.
 
 ---
 
-## 1. Windows SmartScreen or Antivirus Warnings
+## 1. Player Troubleshooting
 
-### Q: Why does Windows SmartScreen display "Windows protected your PC"?
-**Cause:**
-Minecraft SS Forensics is an open-source tool. New releases downloaded from GitHub do not yet possess commercial Authenticode Extended Validation (EV) certificates, which cost hundreds of dollars per year. Windows SmartScreen flags newly downloaded, unsigned binaries by default.
-
-**Resolution:**
+### Q: Windows Defender / SmartScreen warns "Windows protected your PC"
+**Reason**: The scanner is open-source software built by community developers and does not hold an expensive commercial EV (Extended Validation) code-signing certificate from Microsoft.  
+**Resolution**:
 1. Click **More info** on the SmartScreen dialog.
-2. Verify the publisher is open-source and click **Run anyway**.
-3. To verify cryptographic authenticity independently, run the SHA-256 checksum command in PowerShell:
-   ```powershell
-   Get-FileHash -Path ".\MinecraftSsForensics.exe" -Algorithm SHA256
-   ```
-   Compare the resulting hash with the published `.sha256` manifest in the GitHub Release.
+2. Click **Run anyway**.
+3. You can verify the executable's SHA-256 hash against the release checksums published on GitHub before running.
+
+### Q: Prefetch or Driver Audit is marked `NOT_AVAILABLE`
+**Reason**: Windows restricts access to `C:\Windows\Prefetch` and low-level system event logs to administrative users.  
+**Resolution**:
+- Close the scanner.
+- Right-click `MinecraftSsForensics.exe` and select **Run as Administrator**.
+- Rerun the scan.
+
+### Q: The scan hangs or takes a very long time
+**Reason**: Deep directory scanning across multiple secondary or network drives with millions of files.  
+**Resolution**:
+- Ensure external network/backup drives are disconnected during the scan.
+- Cancel the scan and select **Quick Scan Mode** for a focused audit of standard Minecraft directories.
 
 ---
 
-## 2. Prefetch & Execution History Diagnostics
+## 2. Staff Troubleshooting
 
-### Q: Why does the diagnostic check report "Prefetch data is unavailable"?
-**Cause:**
-On many modern Windows systems with solid-state drives (SSDs), Windows or optimization software may disable the `SysMain` (formerly Superfetch) service or set `EnablePrefetcher` to `0` in `HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters`.
+### Q: Viewer displays `⚠ TAMPER DETECTED: Report payload does not match cryptographic seal`
+**Reason**: The report JSON file has been altered after it was generated. This happens when:
+1. A player manually edited fields in the JSON to hide a detected cheat.
+2. A text editor reformatted lines or modified timestamp precision.
+3. The file was partially truncated or corrupted during transfer.  
+**Action**: **Do not accept tampered reports**. Request that the player rerun the scan and send the unaltered file directly.
 
-**Evidentiary Interpretation:**
-* **Prefetch being disabled is NOT evidence of cheating.** Thousands of gaming PCs have Prefetch disabled by default or by Windows performance tweaks.
-* The scanner records this as `NOT_AVAILABLE` under Diagnostic Checks, rather than a failure or anomaly.
-* If Prefetch is unavailable, the scanner relies on BAM/DAM registry keys, PCA history, and active process telemetry.
+### Q: BAM shows device paths like `\Device\HarddiskVolume3\...`
+**Reason**: Background Activity Moderator records volume identifiers rather than DOS drive letters.  
+**Resolution**: The scanner automatically translates these paths to `C:\`, `D:\`, etc. via `QueryDosDevice`. If an unmapped volume appears, it indicates a removable drive or partition that has since been unmounted.
 
----
-
-## 3. Administrator Privileges
-
-### Q: Does the scanner require Administrator privileges to run?
-**Answer:**
-No. The scanner is designed to run under standard user permissions.
-* Under standard user permissions, it inspects active game processes, loaded DLLs, mod folders, UserAssist registry keys, staged files in Downloads/Desktop/Recycle Bin, and USBSTOR keys.
-* Certain system-wide forensic hives (such as `HKLM\...\Services\bam` and Windows System Event Log Event ID 7045) require Administrator permissions to query. If the scanner is run without elevation, it notes these checks as `UNAVAILABLE` or `PASSED (USER MODE)` without crashing or claiming data was deleted.
-
----
-
-## 4. Online Mod Verification Timeouts
-
-### Q: What happens if Modrinth or CurseForge APIs are unreachable or offline?
-**Answer:**
-1. The scanner implements a 4-second timeout with resilient fallback.
-2. If online mod verification fails or times out, the artifact's verification state is recorded as `VERIFICATION_UNAVAILABLE`.
-3. The scanner does **not** assume an unverified mod is a cheat. Its gameplay policy remains governed by local policy pack rules or defaults to `NEEDS_REVIEW`.
-4. Players can also run in 100% offline mode by unchecking "Online Mod Verification" in the scan options.
-
----
-
-## 5. False Positive Mitigation: JNA & Overlay DLLs
-
-### Q: Why was `jnidispatch.dll` or `discord_hook64.dll` loaded into `javaw.exe`?
-**Explanation:**
-* `jnidispatch.dll`: Extracted dynamically into `%TEMP%` by Java Native Access (JNA), used by Minecraft for window management and platform bindings. The scanner checks digital signatures and internal path signatures, marking legitimate native libraries as `Normal System Module (JNA/LWJGL)`.
-* `discord_hook64.dll` / `RTSSHooks64.dll`: Screen recorders, voice overlays, and graphics profilers inject hooks into OpenGL/Vulkan/DirectX windows. The scanner documents these with alternative legitimate explanations, never making unsupported accusations.
-
----
-
-## 6. Cryptographic Seal Mismatch
-
-### Q: What does "❌ SEAL MISMATCH — Report data may have been altered" mean?
-**Cause:**
-Every report generated by the scanner includes an embedded SHA-256 seal computed over its findings, mod inventory, timestamps, and diagnostic counts.
-If a staff member opens a JSON report file where lines were manually edited, values changed, or findings removed, the recomputed digest will not match `reportIntegrityHash`.
-
-**Action for Staff:**
-* Do not accept reports with broken cryptographic seals.
-* Request the player provide the original report file or re-run the scan.
+### Q: Mod is marked `UNKNOWN` but player claims it is legitimate
+**Reason**: The mod was compiled locally, downloaded from an unofficial mirror, or represents a private guild build.  
+**Action**:
+- Check the **Bytecode Capabilities** tab in the viewer.
+- If it contains no suspicious APIs (`Robot`, `cursor`, `packet`, `autoCrystal`), mark as approved for casual play or request the player provide the original source link.

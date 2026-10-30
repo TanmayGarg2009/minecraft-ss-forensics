@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
 using Microsoft.Win32;
 using MinecraftSsForensics.Scanner.Cheats;
 
@@ -13,21 +15,70 @@ public class HistoricalArtifactRecord
     public string Path { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public DateTime? Timestamp { get; set; }
+    public int? RunCount { get; set; }
     public bool IsDeletedIndicator { get; set; }
     public bool HasAccessDenied { get; set; }
     public string? LimitationNote { get; set; }
 }
 
+/// <summary>
+/// Historical execution artifact collector auditing Windows Prefetch (.pf with MAM decompression),
+/// BAM/DAM registry execution keys with volume resolution, and PowerShell history.
+/// </summary>
 public class HistoricalEvidenceScanner
 {
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern uint QueryDosDevice(string lpDeviceName, StringBuilder lpTargetPath, int ucchMax);
+
+    private static readonly Dictionary<string, string> DeviceToDriveMap = InitDeviceDriveMap();
+
+    private static Dictionary<string, string> InitDeviceDriveMap()
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!OperatingSystem.IsWindows()) return map;
+
+        try
+        {
+            var sb = new StringBuilder(1024);
+            foreach (string drive in Environment.GetLogicalDrives())
+            {
+                string cleanDrive = drive.TrimEnd('\\');
+                if (QueryDosDevice(cleanDrive, sb, sb.Capacity) > 0)
+                {
+                    string target = sb.ToString().Trim();
+                    if (!string.IsNullOrEmpty(target))
+                    {
+                        map[target] = cleanDrive;
+                    }
+                }
+            }
+        }
+        catch { /* Non-fatal */ }
+
+        return map;
+    }
+
+    public static string ResolveDevicePath(string rawPath)
+    {
+        if (string.IsNullOrWhiteSpace(rawPath)) return string.Empty;
+        foreach (var kvp in DeviceToDriveMap)
+        {
+            if (rawPath.StartsWith(kvp.Key, StringComparison.OrdinalIgnoreCase))
+            {
+                return kvp.Value + rawPath[kvp.Key.Length..];
+            }
+        }
+        return rawPath;
+    }
+
     public List<HistoricalArtifactRecord> ScanHistoricalArtifacts()
     {
         var records = new List<HistoricalArtifactRecord>();
 
-        // 1. Inspect Windows Temp for orphaned Minecraft JARs or cheat binaries
-        string tempDir = Path.GetTempPath();
+        // 1. Scan %TEMP% for JAR artifacts
         try
         {
+            string tempDir = Path.GetTempPath();
             if (Directory.Exists(tempDir))
             {
                 var files = Directory.GetFiles(tempDir, "*.jar", SearchOption.TopDirectoryOnly);
@@ -92,7 +143,9 @@ public class HistoricalEvidenceScanner
 
     private void ScanPrefetchDirectory(List<HistoricalArtifactRecord> records)
     {
-        string prefetchDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Prefetch");
+        string winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        string prefetchDir = Path.Combine(winDir, "Prefetch");
+
         try
         {
             if (Directory.Exists(prefetchDir))
@@ -103,22 +156,53 @@ public class HistoricalEvidenceScanner
                 foreach (var pf in pfFiles)
                 {
                     string nameUpper = pf.Name.ToUpperInvariant();
-                    bool isJava = nameUpper.Contains("JAVA");
+                    bool isJavaOrMinecraft = nameUpper.Contains("JAVA") || nameUpper.Contains("MINECRAFT");
 
-                    // Check if prefetch file matches any known cheat signature
                     var cheatMatch = CheatDetectionDatabase.Signatures.FirstOrDefault(s =>
                         s.KnownFileNames.Any(k => nameUpper.StartsWith(Path.GetFileNameWithoutExtension(k).ToUpperInvariant())));
 
-                    if (isJava || cheatMatch != null)
+                    if (isJavaOrMinecraft || cheatMatch != null)
                     {
+                        // Parse MAM compressed or uncompressed prefetch header
+                        var parsed = PrefetchParser.ParsePrefetchFile(pf.FullName);
+
+                        DateTime timestamp = pf.LastWriteTimeUtc;
+                        if (parsed.Success && parsed.ExecutionTimestamps.Count > 0)
+                        {
+                            timestamp = parsed.ExecutionTimestamps[0].UtcDateTime;
+                        }
+
+                        string desc;
+                        if (cheatMatch != null)
+                        {
+                            desc = $"Prefetch execution matching cheat '{cheatMatch.Name}' (Run Count: {parsed.RunCount}, Compression: {parsed.CompressionType})";
+                        }
+                        else
+                        {
+                            desc = $"Prefetch execution record: {pf.Name} (Run Count: {parsed.RunCount})";
+                        }
+
+                        // Inspect referenced modules for injected hooks
+                        if (parsed.LoadedFilesAndModules.Count > 0)
+                        {
+                            var suspiciousRef = parsed.LoadedFilesAndModules.FirstOrDefault(m =>
+                                m.Contains("vape", StringComparison.OrdinalIgnoreCase) ||
+                                m.Contains("slinky", StringComparison.OrdinalIgnoreCase) ||
+                                m.Contains("doomsday", StringComparison.OrdinalIgnoreCase));
+
+                            if (suspiciousRef != null)
+                            {
+                                desc += $" • References suspicious module: {suspiciousRef}";
+                            }
+                        }
+
                         records.Add(new HistoricalArtifactRecord
                         {
                             Source = "Prefetch",
                             Path = pf.FullName,
-                            Description = cheatMatch != null
-                                ? $"Windows Prefetch execution record matching known cheat: {cheatMatch.Name} ({pf.Name})"
-                                : $"Windows Prefetch execution record: {pf.Name}",
-                            Timestamp = pf.LastWriteTimeUtc,
+                            Description = desc,
+                            Timestamp = timestamp,
+                            RunCount = parsed.Success ? parsed.RunCount : null,
                             IsDeletedIndicator = false
                         });
                     }
@@ -140,7 +224,7 @@ public class HistoricalEvidenceScanner
             {
                 Source = "Prefetch",
                 HasAccessDenied = true,
-                LimitationNote = "Windows Prefetch directory (C:\\Windows\\Prefetch) access was denied in standard user mode. Non-elevated scan cannot audit historical prefetch records."
+                LimitationNote = "Windows Prefetch directory access was denied in standard user mode. Non-elevated scan cannot audit historical prefetch records."
             });
         }
         catch (Exception ex)
@@ -158,7 +242,6 @@ public class HistoricalEvidenceScanner
     {
         try
         {
-            // Inspect BAM (Background Activity Moderator) and DAM (Desktop Activity Moderator)
             string[] moderatorKeys = { @"SYSTEM\CurrentControlSet\Services\bam\State\UserSettings", @"SYSTEM\CurrentControlSet\Services\dam\State\UserSettings" };
 
             foreach (var rootPath in moderatorKeys)
@@ -177,7 +260,6 @@ public class HistoricalEvidenceScanner
                         {
                             if (string.IsNullOrWhiteSpace(valName)) continue;
 
-                            // BAM stores executable path as value name and 8-byte FILETIME as value data
                             DateTime? executionTime = null;
                             if (sidKey.GetValue(valName) is byte[] bytes && bytes.Length >= 8)
                             {
@@ -192,7 +274,9 @@ public class HistoricalEvidenceScanner
                                 catch { }
                             }
 
-                            string upperName = valName.ToUpperInvariant();
+                            string resolvedPath = ResolveDevicePath(valName);
+                            string upperName = resolvedPath.ToUpperInvariant();
+
                             var cheatMatch = CheatDetectionDatabase.Signatures.FirstOrDefault(s =>
                                 s.KnownFileNames.Any(k => upperName.Contains(Path.GetFileNameWithoutExtension(k).ToUpperInvariant())));
 
@@ -201,10 +285,10 @@ public class HistoricalEvidenceScanner
                                 records.Add(new HistoricalArtifactRecord
                                 {
                                     Source = rootPath.Contains("bam") ? "WindowsBAM" : "WindowsDAM",
-                                    Path = valName,
+                                    Path = resolvedPath,
                                     Description = cheatMatch != null
-                                        ? $"BAM execution record matching known cheat '{cheatMatch.Name}': {valName}"
-                                        : $"BAM execution record: {Path.GetFileName(valName)}",
+                                        ? $"BAM execution record matching known cheat '{cheatMatch.Name}': {resolvedPath}"
+                                        : $"BAM execution record: {Path.GetFileName(resolvedPath)}",
                                     Timestamp = executionTime,
                                     IsDeletedIndicator = false
                                 });
@@ -235,7 +319,15 @@ public class HistoricalEvidenceScanner
 
             if (File.Exists(psHistoryPath))
             {
-                var lines = File.ReadAllLines(psHistoryPath);
+                using var fs = new FileStream(psHistoryPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var reader = new StreamReader(fs);
+                var lines = new List<string>();
+                string? l;
+                while ((l = reader.ReadLine()) != null)
+                {
+                    lines.Add(l);
+                }
+
                 foreach (var line in lines.TakeLast(100))
                 {
                     string lower = line.ToLowerInvariant();

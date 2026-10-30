@@ -143,6 +143,11 @@ public enum SoftwareEvidenceState
     SoftwareInteractingWithMinecraft,
 
     /// <summary>
+    /// Software binary contains verified structural or bytecode capabilities prohibited by game policy (e.g. crystal aura, reach, packet spoofing).
+    /// </summary>
+    SoftwareContainsProhibitedCapabilities,
+
+    /// <summary>
     /// Prohibited in-game capability or automation was actively used (e.g. packet sequence manipulation, crystal aura telemetry).
     /// </summary>
     ProhibitedFunctionalityUsed

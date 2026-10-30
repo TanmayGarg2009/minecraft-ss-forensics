@@ -3,11 +3,10 @@ using System.Collections.Generic;
 using System.Diagnostics.Eventing.Reader;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices;
-using System.Security.Cryptography.X509Certificates;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
 using MinecraftSsForensics.Scanner.Models;
+using MinecraftSsForensics.Scanner.Process;
 
 namespace MinecraftSsForensics.Scanner.Collectors;
 
@@ -21,7 +20,9 @@ public class ServiceOrDriverRecord
     public bool IsDriver => ServiceType == 1 || ServiceType == 2;
     public bool IsInUserDirectory { get; set; }
     public bool IsSigned { get; set; }
+    public bool IsTrustedSignature { get; set; }
     public string? SignerSubject { get; set; }
+    public string? TrustStatusExplanation { get; set; }
     public DateTimeOffset? InstalledTimestamp { get; set; }
     public string Source { get; set; } = "Registry:Services";
 }
@@ -38,40 +39,29 @@ public class ServiceAndDriverScanner
         var records = new List<ServiceOrDriverRecord>();
         findings = new List<FindingRecord>();
 
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        diagnostic = new DiagnosticCheckItem
         {
-            diagnostic = new DiagnosticCheckItem
-            {
-                CheckId = "CHK-SERVICES-DRIVERS",
-                CheckName = "Windows Services & Driver Audit",
-                Source = "ServiceAndDriverScanner",
-                Status = CheckStatus.SKIPPED,
-                Reason = "Operating system is not Windows."
-            };
+            CheckId = "CHK-SERVICES-DRIVERS",
+            CheckName = "Windows Services & Driver Audit",
+            Source = "ServiceAndDriverScanner",
+            Status = CheckStatus.PASSED,
+            Reason = "Audited registered services, drivers, and recent installation history (Event ID 7045)."
+        };
+
+        if (!OperatingSystem.IsWindows())
+        {
+            diagnostic.Status = CheckStatus.SKIPPED;
+            diagnostic.Reason = "Service and driver auditing requires Microsoft Windows.";
             return records;
         }
 
         try
         {
-            // 1. Audit Registry Services Hive: HKLM\SYSTEM\CurrentControlSet\Services
+            // 1. Audit Registry Services
             ScanRegistryServices(records, findings);
 
-            // 2. Query System Event Log for Event ID 7045 (Service/Driver Installed)
+            // 2. Audit System Event Log 7045 (New Service Installed)
             ScanEventId7045(records, findings);
-
-            // 3. Scan SetupAPI.dev.log for recent driver installation entries
-            ScanSetupApiLog(records, findings);
-
-            diagnostic = new DiagnosticCheckItem
-            {
-                CheckId = "CHK-SERVICES-DRIVERS",
-                CheckName = "Windows Services & Driver Audit",
-                Source = "ServiceAndDriverScanner",
-                Status = findings.Any(f => f.Classification == FindingClassification.ConfirmedCheatArtifact || f.Classification == FindingClassification.StrongIndicator)
-                    ? CheckStatus.FLAGGED
-                    : CheckStatus.PASSED,
-                Reason = $"Audited Windows service and driver registry entries. Found {records.Count} notable services/drivers ({records.Count(r => r.IsDriver)} drivers). Note: User-mode scan cannot guarantee detection of DKOM or kernel-level hidden rootkits."
-            };
         }
         catch (Exception ex)
         {
@@ -113,8 +103,9 @@ public class ServiceAndDriverScanner
 
                     string cleanPath = imagePath.Trim().Trim('"');
                     if (cleanPath.StartsWith(@"\??\")) cleanPath = cleanPath[4..];
-                    cleanPath = Environment.ExpandEnvironmentVariables(cleanPath);
+                    if (cleanPath.StartsWith(@"\\?\")) cleanPath = cleanPath[4..];
 
+                    // Check if service executable resides in a user-writable directory
                     string lowerPath = cleanPath.ToLowerInvariant();
                     bool isUserDir = userWritablePatterns.Any(p => lowerPath.Contains(p));
 
@@ -131,42 +122,38 @@ public class ServiceAndDriverScanner
                             Source = "Registry:Services"
                         };
 
-                        // Check digital signature
+                        // Verify Authenticode digital signature
                         if (File.Exists(cleanPath))
                         {
-                            try
-                            {
-                                var cert = X509Certificate.CreateFromSignedFile(cleanPath);
-                                record.IsSigned = cert != null;
-                                record.SignerSubject = cert?.Subject;
-                            }
-                            catch
-                            {
-                                record.IsSigned = false;
-                            }
+                            var trust = AuthenticodeTrustValidator.VerifyFileTrust(cleanPath);
+                            record.IsSigned = trust.IsSigned;
+                            record.IsTrustedSignature = trust.IsTrusted;
+                            record.SignerSubject = trust.SignerSubject;
+                            record.TrustStatusExplanation = trust.StatusExplanation;
                         }
 
                         records.Add(record);
 
-                        // If an unsigned driver or service is registered in a temporary or user directory, flag as suspicious
-                        if (!record.IsSigned)
+                        // If an unsigned or untrusted driver or service is registered in a user directory, flag as suspicious
+                        if (!record.IsTrustedSignature)
                         {
                             findings.Add(new FindingRecord
                             {
                                 RuleId = "DRV-SUSP-USERDIR-SERVICE",
-                                DetectionName = $"Unsigned Service or Driver in User Directory: {subKeyName}",
+                                DetectionName = $"Unsigned / Untrusted Service or Driver in User Directory: {subKeyName}",
                                 Category = FindingCategory.ProcessInjection,
                                 Classification = FindingClassification.Suspicious,
                                 Severity = Severity.High,
                                 Confidence = ConfidenceLevel.High,
                                 EvidenceSource = "Registry:Services",
                                 FilePath = cleanPath,
-                                TechnicalExplanation = $"Service '{subKeyName}' (Type {serviceType}) has ImagePath pointing to user directory: '{cleanPath}'. Digital signature is missing or unverified.",
+                                TechnicalExplanation = $"Service '{subKeyName}' (Type {serviceType}) has ImagePath pointing to user directory: '{cleanPath}'. Digital signature verification: {record.TrustStatusExplanation ?? "Unsigned"}.",
                                 WhyItMatters = "Vulnerable driver exploitation (BYOVD) and custom ghost client kernel loaders often register temporary services from %TEMP% or user folders.",
-                                AlternativeLegitimateExplanations = "Custom hardware diagnostic tool, overclocking utility, or third-party emulator.",
-                                WhatIsProven = "Service registry entry exists pointing to an executable in a user-writable path.",
-                                WhatIsNotProven = "Does not prove the service was loaded specifically to modify Minecraft memory.",
-                                Limitations = "User-mode scan checks registry registration; does not intercept kernel memory calls."
+                                AlternativeLegitimateExplanations = "Custom development tools, peripheral drivers, or gaming software installed to non-standard paths.",
+                                WhatIsProven = $"Service '{subKeyName}' is registered in HKLM Services pointing to a file in a user-writable directory.",
+                                WhatIsNotProven = "Does not prove the service or driver interacts with Minecraft or modifies memory without runtime driver telemetry.",
+                                EvidenceStrengtheningFinding = "Service ImagePath matches a known vulnerable driver hash (e.g. gdrv.sys, mhyprot2.sys, kprocesshacker.sys).",
+                                EvidenceWeakeningFinding = "Service belongs to an established software vendor and is signed with a valid certificate."
                             });
                         }
                     }
@@ -182,12 +169,12 @@ public class ServiceAndDriverScanner
         try
         {
             string query = "*[System[(EventID=7045)]]";
-            var eventsQuery = new EventLogQuery("System", PathType.LogName, query);
+            var eventsQuery = new EventLogQuery("System", PathType.LogName, query) { ReverseDirection = true };
             using var reader = new EventLogReader(eventsQuery);
 
             int eventCount = 0;
-            EventRecord record;
-            while ((record = reader.ReadEvent()) != null && eventCount < 50)
+            EventRecord? record;
+            while ((record = reader.ReadEvent()) != null && eventCount < 200)
             {
                 using (record)
                 {
@@ -218,66 +205,36 @@ public class ServiceAndDriverScanner
                         {
                             RuleId = "EVENT-7045-SERVICE-INSTALLED",
                             DetectionName = $"Service Installed from User Path (Event ID 7045): {serviceName}",
-                            Category = FindingCategory.ExecutionArtifacts,
-                            Classification = FindingClassification.StrongIndicator,
-                            Severity = Severity.High,
-                            Confidence = ConfidenceLevel.Certain,
-                            EvidenceSource = "Windows Event Log: System Event 7045",
+                            Category = FindingCategory.ProcessInjection,
+                            Classification = FindingClassification.Suspicious,
+                            Severity = Severity.Medium,
+                            Confidence = ConfidenceLevel.High,
+                            EvidenceSource = "System Event Log (ID 7045)",
                             FilePath = imagePath,
                             ObservedTimestamp = entry.InstalledTimestamp,
-                            TechnicalExplanation = $"Windows Event Log records installation of service '{serviceName}' with binary '{imagePath}' at {entry.InstalledTimestamp}.",
-                            WhyItMatters = "Confirms historical installation of a service or driver during the event log retention period.",
-                            AlternativeLegitimateExplanations = "Software installation or portable driver utility run by user.",
-                            WhatIsProven = "Service installation event occurred at the recorded timestamp.",
-                            WhatIsNotProven = "Does not prove the service was running during active Minecraft gameplay without timestamp correlation."
+                            TechnicalExplanation = $"Event ID 7045 indicates a new service or driver '{serviceName}' was installed pointing to user directory: '{imagePath}' at {entry.InstalledTimestamp}.",
+                            WhyItMatters = "Transient services installed immediately prior to a match indicate possible kernel cheat loading.",
+                            AlternativeLegitimateExplanations = "Software installation or updater running from temporary extract directory.",
+                            WhatIsProven = "Service installation event was logged in Windows System Event Log.",
+                            WhatIsNotProven = "Does not prove active execution during match without process lifetime correlation."
                         });
                     }
                 }
             }
         }
-        catch { /* Event log requires appropriate read permissions */ }
+        catch { /* Event log access restricted in user mode */ }
     }
 
-    private static void ScanSetupApiLog(List<ServiceOrDriverRecord> records, List<FindingRecord> findings)
+    private static string ExtractXmlValue(string xml, string nodeName)
     {
-        try
-        {
-            string setupApiLog = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "inf", "setupapi.dev.log");
-            if (!File.Exists(setupApiLog)) return;
+        var match = Regex.Match(xml, $@"<{nodeName}>(.*?)</{nodeName}>", RegexOptions.IgnoreCase);
+        if (match.Success)
+            return match.Groups[1].Value.Trim();
 
-            using var stream = new FileStream(setupApiLog, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            using var reader = new StreamReader(stream);
+        var dataMatch = Regex.Match(xml, $@"<Data Name=""{nodeName}"">(.*?)</Data>", RegexOptions.IgnoreCase);
+        if (dataMatch.Success)
+            return dataMatch.Groups[1].Value.Trim();
 
-            string? line;
-            int linesRead = 0;
-            var recentDriverRegex = new Regex(@"Device Install \((?:DiShowUpdateDevice|DriverPackageInstall)\) - (.+)", RegexOptions.Compiled);
-
-            while ((line = reader.ReadLine()) != null && linesRead < 5000)
-            {
-                linesRead++;
-                var match = recentDriverRegex.Match(line);
-                if (match.Success)
-                {
-                    string driverTarget = match.Groups[1].Value.Trim();
-                    if (driverTarget.Contains(@"\temp\") || driverTarget.Contains(@"\appdata\"))
-                    {
-                        records.Add(new ServiceOrDriverRecord
-                        {
-                            Name = Path.GetFileName(driverTarget),
-                            ImagePath = driverTarget,
-                            IsInUserDirectory = true,
-                            Source = "SetupAPI.dev.log"
-                        });
-                    }
-                }
-            }
-        }
-        catch { /* Best effort file read */ }
-    }
-
-    private static string ExtractXmlValue(string xml, string elementName)
-    {
-        var match = Regex.Match(xml, $"<{elementName}>([^<]+)</{elementName}>", RegexOptions.IgnoreCase);
-        return match.Success ? match.Groups[1].Value.Trim() : string.Empty;
+        return string.Empty;
     }
 }

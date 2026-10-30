@@ -3,15 +3,27 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
+using System.Text;
 using MinecraftSsForensics.Scanner.Cheats;
 using MinecraftSsForensics.Scanner.Hashing;
 using MinecraftSsForensics.Scanner.Models;
 
 namespace MinecraftSsForensics.Scanner.Collectors;
 
+public class RecycleBinMetadata
+{
+    public long OriginalSize { get; set; }
+    public DateTimeOffset DeletionTimestamp { get; set; }
+    public string OriginalFilePath { get; set; } = string.Empty;
+    public string OriginalFileName => Path.GetFileName(OriginalFilePath);
+    public string DataFilePath { get; set; } = string.Empty;
+    public string MetadataFilePath { get; set; } = string.Empty;
+}
+
 /// <summary>
 /// Fast file discovery auditor inspecting common download and staging directories
-/// (Downloads, Desktop, %TEMP%, and $Recycle.Bin) for cheat binaries and renamed JARs.
+/// (Downloads, Desktop, %TEMP%, and multi-volume $Recycle.Bin) for cheat binaries and renamed JARs.
+/// Performs genuine directory recursion up to maxDepth and parses Windows $I/$R Recycle Bin metadata.
 /// </summary>
 public class FileDiscoveryScanner
 {
@@ -46,24 +58,24 @@ public class FileDiscoveryScanner
         {
             try
             {
-                ScanDirectory(folder, items, findings, maxDepth: 2);
+                ScanDirectoryRecursive(folder, items, findings, currentDepth: 0, maxDepth: 2);
             }
             catch { /* Permission boundaries */ }
         }
 
-        // Check Recycle Bin
+        // Check Recycle Bin across all fixed drives
         ScanRecycleBin(items, findings);
 
         return items;
     }
 
-    private void ScanDirectory(string dirPath, List<DiscoveredFileItem> items, List<FindingRecord> findings, int maxDepth)
+    private void ScanDirectoryRecursive(string currentDir, List<DiscoveredFileItem> items, List<FindingRecord> findings, int currentDepth, int maxDepth)
     {
-        if (maxDepth < 0 || !Directory.Exists(dirPath)) return;
+        if (currentDepth > maxDepth || !Directory.Exists(currentDir)) return;
 
         try
         {
-            var dirInfo = new DirectoryInfo(dirPath);
+            var dirInfo = new DirectoryInfo(currentDir);
             foreach (var file in dirInfo.GetFiles("*.*", SearchOption.TopDirectoryOnly))
             {
                 string ext = file.Extension.ToLowerInvariant();
@@ -75,7 +87,7 @@ public class FileDiscoveryScanner
                     string sha256 = string.Empty;
                     try
                     {
-                        using var stream = File.OpenRead(file.FullName);
+                        using var stream = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
                         byte[] hashBytes = SHA256.HashData(stream);
                         sha256 = Convert.ToHexString(hashBytes).ToLowerInvariant();
                     }
@@ -99,14 +111,13 @@ public class FileDiscoveryScanner
                         Category = FindingCategory.CheatArtifact,
                         Classification = FindingClassification.ConfirmedCheatArtifact,
                         Severity = Severity.High,
-                        Confidence = ConfidenceLevel.High,
-                        EvidenceSource = "Filesystem Discovery",
+                        Confidence = ConfidenceLevel.Certain,
+                        EvidenceSource = $"File System ({dirInfo.Name})",
                         FilePath = file.FullName,
                         FileSha256 = sha256,
-                        FileSizeBytes = file.Length,
                         ObservedTimestamp = file.LastWriteTimeUtc,
-                        TechnicalExplanation = $"File '{file.Name}' in directory '{dirPath}' directly matches known cheat signature '{sig.Name}'. SHA-256: {sha256}.",
-                        WhyItMatters = "Presence of known cheat executables on the player's computer indicates possession and potential unauthorized use.",
+                        TechnicalExplanation = $"File '{file.Name}' in '{dirInfo.FullName}' matches known cheat signature '{sig.Name}'. Description: {sig.Description}",
+                        WhyItMatters = "Known cheat executables and modified client loaders indicate possession of prohibited advantage software.",
                         AlternativeLegitimateExplanations = "File may have been downloaded for review, testing, or unused on another game server.",
                         WhatIsProven = "The file is physically present in the player's file system.",
                         WhatIsNotProven = "Does not prove the cheat was active or running during the competitive match without process or execution logs.",
@@ -115,62 +126,181 @@ public class FileDiscoveryScanner
                     });
                 }
             }
+
+            if (currentDepth < maxDepth)
+            {
+                foreach (var subDir in dirInfo.GetDirectories())
+                {
+                    // Avoid infinite symlink recursion
+                    if ((subDir.Attributes & FileAttributes.ReparsePoint) != 0) continue;
+                    ScanDirectoryRecursive(subDir.FullName, items, findings, currentDepth + 1, maxDepth);
+                }
+            }
         }
-        catch { /* Non-fatal */ }
+        catch { /* Non-fatal directory access restriction */ }
     }
 
     private void ScanRecycleBin(List<DiscoveredFileItem> items, List<FindingRecord> findings)
     {
+        IEnumerable<DriveInfo> drives;
         try
         {
-            string systemDrive = Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\";
-            string recycleBinPath = Path.Combine(systemDrive, "$Recycle.Bin");
+            drives = DriveInfo.GetDrives().Where(d => d.DriveType == DriveType.Fixed && d.IsReady);
+        }
+        catch
+        {
+            drives = new[] { new DriveInfo(Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\") };
+        }
 
-            if (Directory.Exists(recycleBinPath))
+        foreach (var drive in drives)
+        {
+            try
             {
-                var dirInfo = new DirectoryInfo(recycleBinPath);
-                foreach (var file in dirInfo.GetFiles("*.*", SearchOption.AllDirectories))
-                {
-                    string ext = file.Extension.ToLowerInvariant();
-                    if (ext == ".jar" || ext == ".exe")
-                    {
-                        var sig = CheatDetectionDatabase.MatchFileName(file.Name);
-                        if (sig != null)
-                        {
-                            var item = new DiscoveredFileItem
-                            {
-                                FileName = file.Name,
-                                FilePath = file.FullName,
-                                FileSizeBytes = file.Length,
-                                LastModified = file.LastWriteTimeUtc,
-                                SuspicionReason = $"Deleted cheat artifact discovered in Recycle Bin: {sig.Name}"
-                            };
-                            items.Add(item);
+                string recycleBinPath = Path.Combine(drive.RootDirectory.FullName, "$Recycle.Bin");
+                if (!Directory.Exists(recycleBinPath)) continue;
 
-                            findings.Add(new FindingRecord
+                var binDir = new DirectoryInfo(recycleBinPath);
+                foreach (var userDir in binDir.GetDirectories())
+                {
+                    try
+                    {
+                        foreach (var iFile in userDir.GetFiles("$I*", SearchOption.AllDirectories))
+                        {
+                            var meta = ParseIndexFile(iFile.FullName);
+                            if (meta == null || string.IsNullOrWhiteSpace(meta.OriginalFileName)) continue;
+
+                            string ext = Path.GetExtension(meta.OriginalFileName).ToLowerInvariant();
+                            if (ext != ".jar" && ext != ".exe" && ext != ".dll") continue;
+
+                            var sig = CheatDetectionDatabase.MatchFileName(meta.OriginalFileName);
+                            if (sig != null)
                             {
-                                RuleId = "RECYCLE-BIN-CHEAT-DELETED",
-                                DetectionName = $"Cheat Artifact Found in Recycle Bin: {sig.Name}",
-                                Category = FindingCategory.FileDeletion,
-                                Classification = FindingClassification.ConfirmedCheatArtifact,
-                                Severity = Severity.High,
-                                Confidence = ConfidenceLevel.Certain,
-                                EvidenceSource = "Recycle Bin ($Recycle.Bin)",
-                                FilePath = file.FullName,
-                                ObservedTimestamp = file.LastWriteTimeUtc,
-                                TechnicalExplanation = $"Discovered deleted file '{file.Name}' in $Recycle.Bin matching known cheat signature '{sig.Name}'.",
-                                WhyItMatters = "Players often delete cheat files immediately before or during an investigation to hide evidence.",
-                                AlternativeLegitimateExplanations = "Player may have cleaned up old files days or weeks prior.",
-                                WhatIsProven = "The cheat file was moved to the Recycle Bin on this computer.",
-                                WhatIsNotProven = "Does not prove exact time of deletion unless correlated with USN Journal or Recycle Bin metadata.",
-                                EvidenceStrengtheningFinding = "USN Journal entry showing file deletion within minutes of match conclusion or screenshare request.",
-                                EvidenceWeakeningFinding = "Deletion occurred well before the match session."
-                            });
+                                string sha256 = string.Empty;
+                                long fileSize = meta.OriginalSize;
+
+                                if (File.Exists(meta.DataFilePath))
+                                {
+                                    try
+                                    {
+                                        using var stream = new FileStream(meta.DataFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                                        byte[] hashBytes = SHA256.HashData(stream);
+                                        sha256 = Convert.ToHexString(hashBytes).ToLowerInvariant();
+                                        fileSize = stream.Length;
+                                    }
+                                    catch { /* Best effort file read */ }
+                                }
+
+                                var item = new DiscoveredFileItem
+                                {
+                                    FileName = meta.OriginalFileName,
+                                    FilePath = meta.OriginalFilePath,
+                                    FileSizeBytes = fileSize,
+                                    Sha256 = sha256,
+                                    LastModified = meta.DeletionTimestamp,
+                                    SuspicionReason = $"Deleted cheat artifact recovered from Recycle Bin: {sig.Name}"
+                                };
+                                items.Add(item);
+
+                                findings.Add(new FindingRecord
+                                {
+                                    RuleId = "RECYCLE-BIN-CHEAT-DELETED",
+                                    DetectionName = $"Cheat Artifact Recovered from Recycle Bin: {sig.Name}",
+                                    Category = FindingCategory.FileDeletion,
+                                    Classification = FindingClassification.ConfirmedCheatArtifact,
+                                    Severity = Severity.High,
+                                    Confidence = ConfidenceLevel.Certain,
+                                    EvidenceSource = $"Recycle Bin ({drive.Name.TrimEnd('\\')})",
+                                    FilePath = meta.OriginalFilePath,
+                                    FileSha256 = sha256,
+                                    ObservedTimestamp = meta.DeletionTimestamp,
+                                    TechnicalExplanation = $"Recovered deleted cheat artifact from $Recycle.Bin metadata index '{iFile.Name}'. " +
+                                        $"Original Path: '{meta.OriginalFilePath}'. Exact Deletion Timestamp: {meta.DeletionTimestamp:yyyy-MM-dd HH:mm:ss} UTC. " +
+                                        (File.Exists(meta.DataFilePath) ? "Content payload ($R file) is preserved on disk." : "Data payload was purged."),
+                                    WhyItMatters = "Players often delete cheat files immediately before or during an investigation to hide evidence.",
+                                    AlternativeLegitimateExplanations = "Player may have cleaned up old files days or weeks prior.",
+                                    WhatIsProven = $"The file '{meta.OriginalFileName}' was deleted to the Recycle Bin on volume {drive.Name.TrimEnd('\\')} at {meta.DeletionTimestamp:yyyy-MM-dd HH:mm:ss} UTC.",
+                                    WhatIsNotProven = "Does not prove the cheat was active during the match unless deletion timestamp closely correlates with the match timeframe.",
+                                    EvidenceStrengtheningFinding = "Prefetch or BAM execution timestamp shortly before deletion.",
+                                    EvidenceWeakeningFinding = "Deletion occurred well before the match session."
+                                });
+                            }
                         }
                     }
+                    catch { /* Restricted user SID directory */ }
                 }
             }
+            catch { /* Non-fatal volume error */ }
         }
-        catch { /* Non-fatal */ }
+    }
+
+    /// <summary>
+    /// Parses a Windows $I Recycle Bin metadata index file.
+    /// Supports both Version 1 (Windows Vista/7/8) and Version 2 (Windows 10/11) formats.
+    /// </summary>
+    public static RecycleBinMetadata? ParseIndexFile(string iFilePath)
+    {
+        if (string.IsNullOrWhiteSpace(iFilePath) || !File.Exists(iFilePath)) return null;
+
+        try
+        {
+            byte[] bytes = File.ReadAllBytes(iFilePath);
+            if (bytes.Length < 28) return null;
+
+            long version = BitConverter.ToInt64(bytes, 0);
+            long originalSize = BitConverter.ToInt64(bytes, 8);
+            long fileTime = BitConverter.ToInt64(bytes, 16);
+
+            DateTimeOffset deletionTime;
+            try
+            {
+                deletionTime = fileTime > 0 ? DateTimeOffset.FromFileTime(fileTime) : DateTimeOffset.MinValue;
+            }
+            catch
+            {
+                deletionTime = DateTimeOffset.MinValue;
+            }
+
+            string originalPath;
+            if (version == 2 && bytes.Length >= 28)
+            {
+                // Windows 10/11: Offset 24 is character count (int32), followed by UTF-16LE characters
+                int charCount = BitConverter.ToInt32(bytes, 24);
+                int byteLength = charCount * 2;
+                if (28 + byteLength <= bytes.Length)
+                {
+                    originalPath = Encoding.Unicode.GetString(bytes, 28, byteLength).TrimEnd('\0');
+                }
+                else
+                {
+                    originalPath = Encoding.Unicode.GetString(bytes, 28, bytes.Length - 28).TrimEnd('\0');
+                }
+            }
+            else
+            {
+                // Windows Vista/7/8: Offset 24 contains fixed 520 bytes (260 WCHARs)
+                originalPath = Encoding.Unicode.GetString(bytes, 24, Math.Min(520, bytes.Length - 24)).TrimEnd('\0');
+            }
+
+            int nullIdx = originalPath.IndexOf('\0');
+            if (nullIdx >= 0) originalPath = originalPath[..nullIdx];
+
+            string dir = Path.GetDirectoryName(iFilePath) ?? string.Empty;
+            string fileName = Path.GetFileName(iFilePath);
+            string dataFileName = "$R" + fileName[2..];
+            string dataFilePath = Path.Combine(dir, dataFileName);
+
+            return new RecycleBinMetadata
+            {
+                MetadataFilePath = iFilePath,
+                DataFilePath = dataFilePath,
+                OriginalSize = originalSize,
+                DeletionTimestamp = deletionTime,
+                OriginalFilePath = originalPath
+            };
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

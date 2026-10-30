@@ -8,6 +8,9 @@
     <AssemblyName>MinecraftSsForensics.Viewer</AssemblyName>
     <RootNamespace>MinecraftSsForensics.Viewer.App</RootNamespace>
     <ApplicationTitle>Minecraft SS Forensics - Staff Report Viewer</ApplicationTitle>
+    <Version>2.1.0</Version>
+    <FileVersion>2.1.0.0</FileVersion>
+    <AssemblyVersion>2.1.0.0</AssemblyVersion>
   </PropertyGroup>
 
   <ItemGroup>

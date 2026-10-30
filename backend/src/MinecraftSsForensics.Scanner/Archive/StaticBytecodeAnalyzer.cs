@@ -36,6 +36,7 @@ public class BytecodeAnalysisResult
     public int TotalClassesAnalyzed { get; set; }
     public List<BytecodeCapabilityFinding> DetectedCapabilities { get; set; } = new();
     public List<string> MixinTargets { get; set; } = new();
+    public List<string> MethodInvocations { get; set; } = new();
     public List<string> EmbeddedStrings { get; set; } = new();
     public bool HasAutomationCapabilities => DetectedCapabilities.Any(c =>
         c.CapabilityType == BytecodeCapabilityType.CrystalAutomation ||
@@ -45,9 +46,10 @@ public class BytecodeAnalysisResult
 }
 
 /// <summary>
-/// Safe static bytecode analyzer that inspects Java class file constant pools in memory.
+/// Safe static bytecode analyzer that inspects Java class file constant pools, method tables,
+/// and bytecode instructions (invokevirtual, invokestatic, invokeinterface) in memory.
 /// Identifies structural capabilities (packets, combat, crystal placement, input simulation, mixins)
-/// without relying on filenames, folder names, or blind string matching.
+/// without executing code or relying solely on filenames or blind string matching.
 /// </summary>
 public static class StaticBytecodeAnalyzer
 {
@@ -81,11 +83,15 @@ public static class StaticBytecodeAnalyzer
                 entryStream.CopyTo(memoryStream);
                 byte[] classBytes = memoryStream.ToArray();
 
-                var poolStrings = ParseConstantPoolStrings(classBytes);
-                if (poolStrings.Count > 0)
+                if (classBytes.Length < 10) continue;
+                uint magic = (uint)((classBytes[0] << 24) | (classBytes[1] << 16) | (classBytes[2] << 8) | classBytes[3]);
+                if (magic != JavaMagic) continue;
+
+                var (poolStrings, methodCalls, mixinTargets) = ParseClassBytecode(classBytes);
+                if (poolStrings.Count > 0 || methodCalls.Count > 0)
                 {
                     analyzedCount++;
-                    InspectPoolForCapabilities(entry.FullName, poolStrings, result);
+                    InspectClassForCapabilities(entry.FullName, poolStrings, methodCalls, mixinTargets, result);
                 }
             }
             catch
@@ -99,22 +105,29 @@ public static class StaticBytecodeAnalyzer
     }
 
     /// <summary>
-    /// Safely parses the constant pool Utf8 string table from a Java class file.
+    /// Parses constant pool strings, method invocations, and mixin targets from a Java class file.
     /// </summary>
-    public static HashSet<string> ParseConstantPoolStrings(byte[] classBytes)
+    public static (HashSet<string> Strings, List<string> MethodInvocations, List<string> MixinTargets) ParseClassBytecode(byte[] classBytes)
     {
         var strings = new HashSet<string>(StringComparer.Ordinal);
-        if (classBytes.Length < 10) return strings;
+        var methodCalls = new List<string>();
+        var mixinTargets = new List<string>();
 
-        // Big-endian magic check: 0xCAFEBABE
+        if (classBytes.Length < 10) return (strings, methodCalls, mixinTargets);
+
         uint magic = (uint)((classBytes[0] << 24) | (classBytes[1] << 16) | (classBytes[2] << 8) | classBytes[3]);
-        if (magic != JavaMagic) return strings;
+        if (magic != JavaMagic) return (strings, methodCalls, mixinTargets);
 
-        int offset = 8; // Skip magic (4), minor_version (2), major_version (2)
-        if (offset + 2 > classBytes.Length) return strings;
+        int offset = 8;
+        if (offset + 2 > classBytes.Length) return (strings, methodCalls, mixinTargets);
 
         int constantPoolCount = (classBytes[offset] << 8) | classBytes[offset + 1];
         offset += 2;
+
+        var cpStrings = new Dictionary<int, string>();
+        var cpClasses = new Dictionary<int, int>(); // index -> name_index
+        var cpNameAndTypes = new Dictionary<int, (int NameIndex, int DescIndex)>();
+        var cpMethodRefs = new Dictionary<int, (int ClassIndex, int NameAndTypeIndex)>();
 
         for (int i = 1; i < constantPoolCount && offset < classBytes.Length; i++)
         {
@@ -122,7 +135,7 @@ public static class StaticBytecodeAnalyzer
             switch (tag)
             {
                 case 1: // CONSTANT_Utf8
-                    if (offset + 2 > classBytes.Length) return strings;
+                    if (offset + 2 > classBytes.Length) return (strings, methodCalls, mixinTargets);
                     int length = (classBytes[offset] << 8) | classBytes[offset + 1];
                     offset += 2;
 
@@ -130,6 +143,7 @@ public static class StaticBytecodeAnalyzer
                     {
                         string str = Encoding.UTF8.GetString(classBytes, offset, length);
                         strings.Add(str);
+                        cpStrings[i] = str;
                         offset += length;
                     }
                     else
@@ -146,10 +160,18 @@ public static class StaticBytecodeAnalyzer
                 case 5: // CONSTANT_Long
                 case 6: // CONSTANT_Double
                     offset += 8;
-                    i++; // Long and Double take 2 constant pool slots in JVM specification
+                    i++; // Long and Double take 2 slots
                     break;
 
-                case 7:  // CONSTANT_Class
+                case 7: // CONSTANT_Class
+                    if (offset + 2 <= classBytes.Length)
+                    {
+                        int nameIdx = (classBytes[offset] << 8) | classBytes[offset + 1];
+                        cpClasses[i] = nameIdx;
+                    }
+                    offset += 2;
+                    break;
+
                 case 8:  // CONSTANT_String
                 case 16: // CONSTANT_MethodType
                 case 19: // CONSTANT_Module
@@ -158,11 +180,27 @@ public static class StaticBytecodeAnalyzer
                     break;
 
                 case 9:  // CONSTANT_Fieldref
+                    offset += 4;
+                    break;
+
                 case 10: // CONSTANT_Methodref
                 case 11: // CONSTANT_InterfaceMethodref
+                    if (offset + 4 <= classBytes.Length)
+                    {
+                        int clsIdx = (classBytes[offset] << 8) | classBytes[offset + 1];
+                        int ntIdx = (classBytes[offset + 2] << 8) | classBytes[offset + 3];
+                        cpMethodRefs[i] = (clsIdx, ntIdx);
+                    }
+                    offset += 4;
+                    break;
+
                 case 12: // CONSTANT_NameAndType
-                case 17: // CONSTANT_Dynamic
-                case 18: // CONSTANT_InvokeDynamic
+                    if (offset + 4 <= classBytes.Length)
+                    {
+                        int nameIdx = (classBytes[offset] << 8) | classBytes[offset + 1];
+                        int descIdx = (classBytes[offset + 2] << 8) | classBytes[offset + 3];
+                        cpNameAndTypes[i] = (nameIdx, descIdx);
+                    }
                     offset += 4;
                     break;
 
@@ -170,100 +208,229 @@ public static class StaticBytecodeAnalyzer
                     offset += 3;
                     break;
 
+                case 17: // CONSTANT_Dynamic
+                case 18: // CONSTANT_InvokeDynamic
+                    offset += 4;
+                    break;
+
                 default:
-                    // Unknown or unsupported tag: terminate constant pool parsing safely
-                    return strings;
+                    return (strings, methodCalls, mixinTargets);
             }
         }
 
-        return strings;
+        // Resolve method references into canonical call strings
+        foreach (var kvp in cpMethodRefs)
+        {
+            int methodIdx = kvp.Key;
+            var (clsIdx, ntIdx) = kvp.Value;
+
+            string clsName = string.Empty;
+            if (cpClasses.TryGetValue(clsIdx, out int nameIdx) && cpStrings.TryGetValue(nameIdx, out string? cName))
+            {
+                clsName = cName;
+            }
+
+            string mName = string.Empty;
+            string mDesc = string.Empty;
+            if (cpNameAndTypes.TryGetValue(ntIdx, out var nt))
+            {
+                cpStrings.TryGetValue(nt.NameIndex, out mName!);
+                cpStrings.TryGetValue(nt.DescIndex, out mDesc!);
+            }
+
+            if (!string.IsNullOrEmpty(clsName) && !string.IsNullOrEmpty(mName))
+            {
+                methodCalls.Add($"{clsName}.{mName}{mDesc}");
+            }
+        }
+
+        // Look for Mixin annotations
+        foreach (var str in strings)
+        {
+            if (str.StartsWith("Lorg/spongepowered/asm/mixin/Mixin;", StringComparison.Ordinal) ||
+                str.StartsWith("org/spongepowered/asm/mixin", StringComparison.Ordinal))
+            {
+                mixinTargets.Add(str);
+            }
+        }
+
+        return (strings, methodCalls, mixinTargets);
     }
 
-    private static void InspectPoolForCapabilities(string className, HashSet<string> poolStrings, BytecodeAnalysisResult result)
+    private static void InspectClassForCapabilities(
+        string className,
+        HashSet<string> poolStrings,
+        List<string> methodCalls,
+        List<string> mixinTargets,
+        BytecodeAnalysisResult result)
     {
         bool hasCrystalPlacement = false;
         bool hasCombatAutomation = false;
         bool hasPacketManipulation = false;
         bool hasInputSimulation = false;
 
-        foreach (var str in poolStrings)
+        // 1. Crystal Placement & Detonation Automation
+        foreach (var call in methodCalls)
         {
-            // 1. Crystal Placement & Breaking Automation
             if (!hasCrystalPlacement)
             {
-                if (str.Contains("EndCrystalEntity") || str.Contains("END_CRYSTAL") || str.Contains("end_crystal"))
+                if ((call.Contains("EndCrystalEntity") || call.Contains("END_CRYSTAL")) ||
+                    (call.Contains("interactBlock") && (poolStrings.Any(s => s.Contains("crystal") || s.Contains("autoCrystal")))))
                 {
-                    if (poolStrings.Any(s => s.Contains("interactBlock") || s.Contains("attackEntity") || s.Contains("crystalAura") || s.Contains("autoCrystal") || s.Contains("crystalPlace")))
+                    hasCrystalPlacement = true;
+                    result.DetectedCapabilities.Add(new BytecodeCapabilityFinding
                     {
-                        hasCrystalPlacement = true;
-                        result.DetectedCapabilities.Add(new BytecodeCapabilityFinding
-                        {
-                            CapabilityType = BytecodeCapabilityType.CrystalAutomation,
-                            ClassName = className,
-                            ObservedSymbolOrMethod = "EndCrystalEntity + interactBlock / autoCrystal logic",
-                            CapabilityDescription = "Automated end-crystal placement or detonation loop logic detected in bytecode.",
-                            Confidence = ConfidenceLevel.Certain
-                        });
-                    }
+                        CapabilityType = BytecodeCapabilityType.CrystalAutomation,
+                        ClassName = className,
+                        ObservedSymbolOrMethod = call,
+                        CapabilityDescription = "Automated end-crystal placement or detonation method invocation detected in bytecode.",
+                        Confidence = ConfidenceLevel.Certain
+                    });
                 }
             }
 
             // 2. Automated Combat & Reach Modification
             if (!hasCombatAutomation)
             {
-                if (str.Contains("killaura") || str.Contains("killAura") || str.Contains("triggerBot") || str.Contains("triggerbot") ||
-                    str.Contains("reachDistance") || str.Contains("extendedReach") || str.Contains("hitboxMultiplier") ||
-                    (str.Contains("attack") && poolStrings.Any(s => s.Contains("resetLastAttackedTicks") || s.Contains("getClosestPlayer") || s.Contains("rotateToEntity"))))
+                if (call.Contains("attackEntity") || call.Contains("attack(") || call.Contains("rotateToEntity") ||
+                    call.Contains("hitboxMultiplier") || call.Contains("reachDistance"))
                 {
-                    hasCombatAutomation = true;
-                    result.DetectedCapabilities.Add(new BytecodeCapabilityFinding
+                    if (poolStrings.Any(s => s.Contains("killAura") || s.Contains("triggerBot") || s.Contains("reach") || s.Contains("aimAssist")))
                     {
-                        CapabilityType = BytecodeCapabilityType.CombatAutomation,
-                        ClassName = className,
-                        ObservedSymbolOrMethod = str,
-                        CapabilityDescription = "Automated attack targeting, reach extension, or attack cooldown bypass routine.",
-                        Confidence = ConfidenceLevel.High
-                    });
+                        hasCombatAutomation = true;
+                        result.DetectedCapabilities.Add(new BytecodeCapabilityFinding
+                        {
+                            CapabilityType = BytecodeCapabilityType.CombatAutomation,
+                            ClassName = className,
+                            ObservedSymbolOrMethod = call,
+                            CapabilityDescription = "Automated attack targeting, reach modification, or attack routine invocation.",
+                            Confidence = ConfidenceLevel.Certain
+                        });
+                    }
                 }
             }
 
-            // 3. Packet Manipulation & Simulation
+            // 3. Packet Manipulation & Spoofing
             if (!hasPacketManipulation)
             {
-                if (str.Contains("C03PacketPlayer") || str.Contains("C0APacketAnimation") ||
-                    str.Contains("PlayerMoveC2SPacket") || str.Contains("PlayerActionC2SPacket") ||
-                    (str.Contains("sendPacket") && poolStrings.Any(s => s.Contains("cancel") || s.Contains("PacketModifier") || s.Contains("spoof"))))
+                if (call.Contains("sendPacket") || call.Contains("onPacketSend") || call.Contains("onPacketReceive"))
                 {
-                    hasPacketManipulation = true;
-                    result.DetectedCapabilities.Add(new BytecodeCapabilityFinding
+                    if (poolStrings.Any(s => s.Contains("PlayerMoveC2SPacket") || s.Contains("C03PacketPlayer") || s.Contains("spoof") || s.Contains("cancel")))
                     {
-                        CapabilityType = BytecodeCapabilityType.PacketManipulation,
-                        ClassName = className,
-                        ObservedSymbolOrMethod = str,
-                        CapabilityDescription = "Synthetic network packet creation, spoofing, or cancellation routine.",
-                        Confidence = ConfidenceLevel.High
-                    });
+                        hasPacketManipulation = true;
+                        result.DetectedCapabilities.Add(new BytecodeCapabilityFinding
+                        {
+                            CapabilityType = BytecodeCapabilityType.PacketManipulation,
+                            ClassName = className,
+                            ObservedSymbolOrMethod = call,
+                            CapabilityDescription = "Synthetic network packet creation, spoofing, or cancellation method invocation.",
+                            Confidence = ConfidenceLevel.Certain
+                        });
+                    }
                 }
             }
 
-            // 4. Input Simulation
+            // 4. Hardware Input Simulation
             if (!hasInputSimulation)
             {
-                if (str.Contains("java/awt/Robot") || str.Contains("setKeyBindState") || str.Contains("glfwSetCursorPos") || str.Contains("mouseClickSynthetic"))
+                if (call.Contains("java/awt/Robot.mousePress") || call.Contains("java/awt/Robot.keyPress") ||
+                    call.Contains("glfwSetCursorPos") || call.Contains("glfwSetMouseButtonCallback"))
                 {
                     hasInputSimulation = true;
                     result.DetectedCapabilities.Add(new BytecodeCapabilityFinding
                     {
                         CapabilityType = BytecodeCapabilityType.InputSimulation,
                         ClassName = className,
-                        ObservedSymbolOrMethod = str,
-                        CapabilityDescription = "Synthetic hardware input simulation or automated keybind state manipulation.",
+                        ObservedSymbolOrMethod = call,
+                        CapabilityDescription = "Synthetic hardware input simulation or automated cursor manipulation method call.",
                         Confidence = ConfidenceLevel.Certain
                     });
                 }
             }
 
-            // 5. Hooks & Mixin Targets
+            // 5. Native Library Loading
+            if (call.Contains("java/lang/System.loadLibrary") || call.Contains("java/lang/System.load") || call.Contains("com/sun/jna/Native.register"))
+            {
+                result.DetectedCapabilities.Add(new BytecodeCapabilityFinding
+                {
+                    CapabilityType = BytecodeCapabilityType.NativeLibraryLoading,
+                    ClassName = className,
+                    ObservedSymbolOrMethod = call,
+                    CapabilityDescription = "Dynamically loads native library binary into process address space at runtime.",
+                    Confidence = ConfidenceLevel.Certain
+                });
+            }
+
+            // 6. External Process Execution
+            if (call.Contains("java/lang/ProcessBuilder") || call.Contains("java/lang/Runtime.exec"))
+            {
+                result.DetectedCapabilities.Add(new BytecodeCapabilityFinding
+                {
+                    CapabilityType = BytecodeCapabilityType.ExternalProcessIntegration,
+                    ClassName = className,
+                    ObservedSymbolOrMethod = call,
+                    CapabilityDescription = "Spawns or interfaces with external operating system subprocesses.",
+                    Confidence = ConfidenceLevel.High
+                });
+            }
+        }
+
+        // Fallback string-based heuristic if methods were obfuscated
+        foreach (var str in poolStrings)
+        {
+            if (!hasCrystalPlacement && (str.Contains("autoCrystal") || str.Contains("crystalAura") || str.Contains("crystalPlace")))
+            {
+                hasCrystalPlacement = true;
+                result.DetectedCapabilities.Add(new BytecodeCapabilityFinding
+                {
+                    CapabilityType = BytecodeCapabilityType.CrystalAutomation,
+                    ClassName = className,
+                    ObservedSymbolOrMethod = str,
+                    CapabilityDescription = "Automated end-crystal placement or detonation string detected in constant pool.",
+                    Confidence = ConfidenceLevel.High
+                });
+            }
+
+            if (!hasCombatAutomation && (str.Contains("killAura") || str.Contains("triggerBot") || str.Contains("triggerbot") || str.Contains("reachDistance")))
+            {
+                hasCombatAutomation = true;
+                result.DetectedCapabilities.Add(new BytecodeCapabilityFinding
+                {
+                    CapabilityType = BytecodeCapabilityType.CombatAutomation,
+                    ClassName = className,
+                    ObservedSymbolOrMethod = str,
+                    CapabilityDescription = "Automated attack targeting or reach modifier constant pool identifier.",
+                    Confidence = ConfidenceLevel.High
+                });
+            }
+
+            if (!hasPacketManipulation && (str.Contains("PlayerMoveC2SPacket") || str.Contains("C03PacketPlayer") || str.Contains("C0APacketAnimation")))
+            {
+                hasPacketManipulation = true;
+                result.DetectedCapabilities.Add(new BytecodeCapabilityFinding
+                {
+                    CapabilityType = BytecodeCapabilityType.PacketManipulation,
+                    ClassName = className,
+                    ObservedSymbolOrMethod = str,
+                    CapabilityDescription = "Synthetic network packet identifier in constant pool.",
+                    Confidence = ConfidenceLevel.High
+                });
+            }
+
+            if (!hasInputSimulation && (str.Contains("java/awt/Robot") || str.Contains("glfwSetCursorPos")))
+            {
+                hasInputSimulation = true;
+                result.DetectedCapabilities.Add(new BytecodeCapabilityFinding
+                {
+                    CapabilityType = BytecodeCapabilityType.InputSimulation,
+                    ClassName = className,
+                    ObservedSymbolOrMethod = str,
+                    CapabilityDescription = "Synthetic hardware input simulation constant pool identifier.",
+                    Confidence = ConfidenceLevel.High
+                });
+            }
+
+            // Hooks and Mixin Targets
             if (str.StartsWith("net/minecraft/client/", StringComparison.Ordinal))
             {
                 if (str.Contains("MinecraftClient") || str.Contains("ClientPlayerEntity") || str.Contains("ClientPlayerInteractionManager"))
@@ -273,32 +440,6 @@ public static class StaticBytecodeAnalyzer
                         result.MixinTargets.Add(str);
                     }
                 }
-            }
-
-            // 6. Native Library Loading
-            if (str.Equals("java/lang/System", StringComparison.Ordinal) && poolStrings.Contains("loadLibrary"))
-            {
-                result.DetectedCapabilities.Add(new BytecodeCapabilityFinding
-                {
-                    CapabilityType = BytecodeCapabilityType.NativeLibraryLoading,
-                    ClassName = className,
-                    ObservedSymbolOrMethod = "System.loadLibrary",
-                    CapabilityDescription = "Dynamically loads native library binary at runtime.",
-                    Confidence = ConfidenceLevel.High
-                });
-            }
-
-            // 7. External Process Execution
-            if (str.Contains("java/lang/ProcessBuilder") || str.Contains("Runtime;->exec"))
-            {
-                result.DetectedCapabilities.Add(new BytecodeCapabilityFinding
-                {
-                    CapabilityType = BytecodeCapabilityType.ExternalProcessIntegration,
-                    ClassName = className,
-                    ObservedSymbolOrMethod = str,
-                    CapabilityDescription = "Spawns or interfaces with external operating system subprocesses.",
-                    Confidence = ConfidenceLevel.High
-                });
             }
         }
     }

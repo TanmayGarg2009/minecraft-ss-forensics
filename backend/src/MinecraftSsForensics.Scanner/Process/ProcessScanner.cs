@@ -130,19 +130,14 @@ public class ProcessScanner : IProcessScanner
                         IsSuspiciousLocation = isTemp
                     };
 
-                    // Check digital signature if file exists
+                    // Check digital signature and Authenticode trust if file exists
                     if (File.Exists(path))
                     {
-                        try
-                        {
-                            var cert = X509Certificate.CreateFromSignedFile(path);
-                            modInfo.IsSigned = true;
-                            modInfo.SignerSubject = cert.Subject;
-                        }
-                        catch
-                        {
-                            modInfo.IsSigned = false;
-                        }
+                        var trust = AuthenticodeTrustValidator.VerifyFileTrust(path);
+                        modInfo.IsSigned = trust.IsSigned;
+                        modInfo.IsTrustedSignature = trust.IsTrusted;
+                        modInfo.SignerSubject = trust.SignerSubject;
+                        modInfo.TrustStatusExplanation = trust.StatusExplanation;
 
                         try
                         {

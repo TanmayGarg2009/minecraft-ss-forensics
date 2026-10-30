@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Text;
 using Microsoft.Win32;
 using MinecraftSsForensics.Scanner.Cheats;
@@ -8,6 +7,11 @@ using MinecraftSsForensics.Scanner.Models;
 
 namespace MinecraftSsForensics.Scanner.Collectors;
 
+/// <summary>
+/// Scans critical Windows Registry execution hives:
+/// UserAssist (ROT13-decoded GUI execution records with execution count and last run timestamp),
+/// Program Compatibility Assistant (PcaSvc), Run/RunOnce autostart keys, and RecentDocs MRU lists.
+/// </summary>
 public class RegistryScanner
 {
     public List<RegistryEvidenceItem> ScanRegistryArtifacts(out List<FindingRecord> findings)
@@ -21,20 +25,11 @@ public class RegistryScanner
         try
         {
             ScanUserAssist(records, findings);
-            ScanPcaStore(records, findings);
-            ScanRunKeys(records, findings);
+            ScanPcaSvc(records, findings);
+            ScanRunKeys(records);
             ScanRecentDocs(records);
         }
-        catch (Exception ex)
-        {
-            records.Add(new RegistryEvidenceItem
-            {
-                KeyPath = "RegistryScanError",
-                ValueName = "Exception",
-                ValueData = ex.Message,
-                Significance = "Registry inspection encountered an error."
-            });
-        }
+        catch { /* Fallback */ }
 
         return records;
     }
@@ -48,100 +43,133 @@ public class RegistryScanner
 
             foreach (string subKeyName in userAssist.GetSubKeyNames())
             {
-                using var countKey = userAssist.OpenSubKey($@"{subKeyName}\Count");
-                if (countKey == null) continue;
-
-                foreach (string valName in countKey.GetValueNames())
+                try
                 {
-                    string decodedName = Rot13(valName);
-                    string lower = decodedName.ToLowerInvariant();
+                    using var countKey = userAssist.OpenSubKey($@"{subKeyName}\Count");
+                    if (countKey == null) continue;
 
-                    var sig = CheatDetectionDatabase.MatchFileName(decodedName);
-                    bool isCheatMatch = sig != null;
+                    foreach (string valName in countKey.GetValueNames())
+                    {
+                        string decodedName = Rot13(valName);
+                        string lower = decodedName.ToLowerInvariant();
 
-                    if (isCheatMatch || lower.Contains("minecraft") || lower.Contains("javaw") || lower.Contains("cheat") || lower.Contains("clicker"))
+                        var sig = CheatDetectionDatabase.MatchFileName(decodedName);
+                        bool isCheatMatch = sig != null;
+
+                        if (isCheatMatch || lower.Contains("minecraft") || lower.Contains("javaw") || lower.Contains("cheat") || lower.Contains("clicker"))
+                        {
+                            int runCount = 0;
+                            DateTimeOffset? lastExecution = null;
+
+                            // In Windows 7/8/10/11: UserAssist Count value is a 72-byte binary structure
+                            if (countKey.GetValue(valName) is byte[] bytes && bytes.Length >= 68)
+                            {
+                                runCount = BitConverter.ToInt32(bytes, 4);
+                                long fileTime = BitConverter.ToInt64(bytes, 60);
+                                if (fileTime > 0)
+                                {
+                                    try { lastExecution = DateTimeOffset.FromFileTime(fileTime); } catch { }
+                                }
+                            }
+
+                            string valDataDesc = $"Run Count: {runCount}" + (lastExecution.HasValue ? $", Last Executed: {lastExecution:yyyy-MM-dd HH:mm:ss} UTC" : "");
+
+                            records.Add(new RegistryEvidenceItem
+                            {
+                                KeyPath = $@"HKCU\...\UserAssist\{subKeyName}\Count",
+                                ValueName = decodedName,
+                                ValueData = valDataDesc,
+                                Significance = isCheatMatch ? $"UserAssist trace matching known cheat tool: {sig!.Name}" : "Standard GUI execution trace"
+                            });
+
+                            if (isCheatMatch)
+                            {
+                                findings.Add(new FindingRecord
+                                {
+                                    RuleId = "REG-USERASSIST-CHEAT",
+                                    DetectionName = $"UserAssist Execution Record: {sig!.Name}",
+                                    Category = FindingCategory.RegistryArtifact,
+                                    Classification = FindingClassification.StrongIndicator,
+                                    Severity = Severity.High,
+                                    Confidence = ConfidenceLevel.High,
+                                    EvidenceSource = "Registry (UserAssist)",
+                                    FilePath = decodedName,
+                                    ObservedTimestamp = lastExecution,
+                                    TechnicalExplanation = $"Decoded UserAssist ROT13 registry entry '{decodedName}' matches known cheat identifier '{sig.Name}'. " +
+                                        $"Recorded Run Count: {runCount}. " + (lastExecution.HasValue ? $"Last Executed: {lastExecution:yyyy-MM-dd HH:mm:ss} UTC." : ""),
+                                    WhyItMatters = "Proves this executable was launched on this Windows user account via the graphical desktop interface.",
+                                    AlternativeLegitimateExplanations = "Does not prove execution during the competitive Minecraft match session unless correlated with session timestamps.",
+                                    WhatIsProven = "The application was executed via Windows Explorer interface on this machine.",
+                                    WhatIsNotProven = "Does not prove the cheat was active during the specific Minecraft match under investigation.",
+                                    EvidenceStrengtheningFinding = "Prefetch (.pf) or BAM entry with timestamp matching Minecraft gameplay.",
+                                    EvidenceWeakeningFinding = "File creation/execution timestamp is months old with zero recent activity."
+                                });
+                            }
+                        }
+                    }
+                }
+                catch (UnauthorizedAccessException) { /* Restricted subkey */ }
+                catch (Exception) { /* Skip subkey */ }
+            }
+        }
+        catch { /* Fallback */ }
+    }
+
+    private void ScanPcaSvc(List<RegistryEvidenceItem> records, List<FindingRecord> findings)
+    {
+        try
+        {
+            string[] pcaPaths =
+            {
+                @"Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Compatibility Assistant\Store",
+                @"Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Compatibility Assistant\Persisted"
+            };
+
+            foreach (var path in pcaPaths)
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(path);
+                if (key == null) continue;
+
+                foreach (string valName in key.GetValueNames())
+                {
+                    string lower = valName.ToLowerInvariant();
+                    var sig = CheatDetectionDatabase.MatchFileName(valName);
+
+                    if (sig != null || lower.Contains("cheat") || lower.Contains("autoclicker") || lower.Contains("doomsday") || lower.Contains("vape"))
                     {
                         records.Add(new RegistryEvidenceItem
                         {
-                            KeyPath = $@"HKCU\...\UserAssist\{subKeyName}\Count",
-                            ValueName = decodedName,
-                            ValueData = "GUI Execution Record",
-                            Significance = isCheatMatch ? $"UserAssist trace matching known cheat tool: {sig!.Name}" : "Standard GUI execution trace"
+                            KeyPath = $@"HKCU\{path}",
+                            ValueName = valName,
+                            ValueData = "Program Compatibility Assistant Execution Record",
+                            Significance = sig != null ? $"PCA trace matching cheat: {sig.Name}" : "Suspicious executable PCA trace"
                         });
 
-                        if (isCheatMatch)
+                        if (sig != null)
                         {
                             findings.Add(new FindingRecord
                             {
-                                RuleId = "REG-USERASSIST-CHEAT",
-                                DetectionName = $"UserAssist Execution Record: {sig!.Name}",
+                                RuleId = "REG-PCA-CHEAT",
+                                DetectionName = $"Program Compatibility Record: {sig.Name}",
                                 Category = FindingCategory.RegistryArtifact,
                                 Classification = FindingClassification.StrongIndicator,
                                 Severity = Severity.High,
                                 Confidence = ConfidenceLevel.High,
-                                EvidenceSource = "Registry (UserAssist)",
-                                FilePath = decodedName,
-                                TechnicalExplanation = $"Decoded UserAssist ROT13 registry entry '{decodedName}' matches known cheat identifier '{sig.Name}'. UserAssist tracks GUI application execution through Windows Explorer.",
-                                WhyItMatters = "Proves this executable was launched on this Windows user account via the graphical desktop interface.",
-                                AlternativeLegitimateExplanations = "Does not prove execution during the competitive Minecraft match session unless correlated with session timestamps.",
-                                WhatIsProven = "The application was executed via Windows Explorer interface on this machine.",
-                                WhatIsNotProven = "Does not prove the cheat was active during the specific Minecraft match under investigation.",
-                                EvidenceStrengtheningFinding = "Prefetch (.pf) or BAM entry with timestamp matching Minecraft gameplay.",
-                                EvidenceWeakeningFinding = "File creation/execution timestamp is months old with zero recent activity."
+                                EvidenceSource = "Registry (PcaSvc)",
+                                FilePath = valName,
+                                TechnicalExplanation = $"Program Compatibility Assistant recorded execution of known cheat '{sig.Name}' at '{valName}'.",
+                                WhyItMatters = "PCA persists execution tracking even if files are deleted or moved.",
+                                AlternativeLegitimateExplanations = "Historical artifact prior to server registration."
                             });
                         }
                     }
                 }
             }
         }
-        catch { /* Non-fatal registry read restriction */ }
+        catch { /* Fallback */ }
     }
 
-    private void ScanPcaStore(List<RegistryEvidenceItem> records, List<FindingRecord> findings)
-    {
-        try
-        {
-            using var pcaKey = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Compatibility Assistant\Store");
-            if (pcaKey == null) return;
-
-            foreach (string valName in pcaKey.GetValueNames())
-            {
-                var sig = CheatDetectionDatabase.MatchFileName(valName);
-                if (sig != null)
-                {
-                    records.Add(new RegistryEvidenceItem
-                    {
-                        KeyPath = @"HKCU\...\AppCompatFlags\Compatibility Assistant\Store",
-                        ValueName = valName,
-                        ValueData = "PCA Interaction Trace",
-                        Significance = $"Program Compatibility Assistant record matching {sig.Name}"
-                    });
-
-                    findings.Add(new FindingRecord
-                    {
-                        RuleId = "REG-PCA-CHEAT",
-                        DetectionName = $"PCA Execution Artifact: {sig.Name}",
-                        Category = FindingCategory.RegistryArtifact,
-                        Classification = FindingClassification.StrongIndicator,
-                        Severity = Severity.High,
-                        Confidence = ConfidenceLevel.High,
-                        EvidenceSource = "Registry (PcaSvc Store)",
-                        FilePath = valName,
-                        TechnicalExplanation = $"Windows Program Compatibility Assistant (PcaSvc) logged execution telemetry for '{valName}'. PcaSvc records executables that run on the system.",
-                        WhyItMatters = "Confirms historical execution of an executable recognized in the cheat detection database.",
-                        AlternativeLegitimateExplanations = "User may have downloaded and tested the tool in singleplayer or outside the competition window.",
-                        WhatIsProven = "The program was executed on this Windows installation.",
-                        WhatIsNotProven = "Does not prove injection into javaw.exe during match play.",
-                        EvidenceStrengtheningFinding = "USN Journal deletion record immediately following match conclusion.",
-                        EvidenceWeakeningFinding = "Execution occurred outside match timeframe."
-                    });
-                }
-            }
-        }
-        catch { /* Non-fatal */ }
-    }
-
-    private void ScanRunKeys(List<RegistryEvidenceItem> records, List<FindingRecord> findings)
+    private void ScanRunKeys(List<RegistryEvidenceItem> records)
     {
         try
         {
@@ -175,12 +203,24 @@ public class RegistryScanner
                 {
                     if (valName != "MRUListEx")
                     {
+                        string fileName = valName;
+                        if (recentKey.GetValue(valName) is byte[] bytes && bytes.Length > 2)
+                        {
+                            // In RecentDocs, the binary data begins with a UTF-16LE null-terminated filename
+                            string decoded = Encoding.Unicode.GetString(bytes);
+                            int nullIdx = decoded.IndexOf('\0');
+                            if (nullIdx > 0)
+                            {
+                                fileName = decoded[..nullIdx];
+                            }
+                        }
+
                         records.Add(new RegistryEvidenceItem
                         {
                             KeyPath = @"HKCU\...\Explorer\RecentDocs\.jar",
                             ValueName = valName,
-                            ValueData = "Recent JAR Document Access",
-                            Significance = "Recent JAR file interaction"
+                            ValueData = fileName,
+                            Significance = $"Recent JAR file interaction: {fileName}"
                         });
                     }
                 }

@@ -27,7 +27,9 @@ public class LoadedModuleInfo
     public long? FileSizeBytes { get; set; }
     public string? Sha256 { get; set; }
     public bool IsSigned { get; set; }
+    public bool IsTrustedSignature { get; set; }
     public string? SignerSubject { get; set; }
+    public string? TrustStatusExplanation { get; set; }
     public bool IsStandardSystemModule { get; set; }
     public bool IsSuspiciousLocation { get; set; }
 

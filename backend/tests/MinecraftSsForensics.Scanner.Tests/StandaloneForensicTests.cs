@@ -594,12 +594,13 @@ public class StandaloneForensicTests : IDisposable
         var assessmentA = assessmentsA.First(a => a.SoftwareName == "SpeedAutoClicker");
         Assert.False(assessmentA.IsPolicyViolation); // Execution was NOT established!
 
-        // Case B: Same file, with active game process running
+        // Case B: Same file, with active game process running with mod loaded in session
         var reportExecuted = new StandaloneReport();
         reportExecuted.RunningProcesses.Add(new ProcessTelemetryItem
         {
             ProcessId = 5544,
-            ProcessName = "javaw.exe"
+            ProcessName = "javaw.exe",
+            SanitizedCommandLine = "-classpath C:\\Users\\Player\\AppData\\Roaming\\.minecraft\\mods\\SpeedAutoClicker.jar net.minecraft.client.main.Main"
         });
         reportExecuted.ModInventory.Add(new DiscoveredModItem
         {
@@ -745,13 +746,14 @@ public class StandaloneForensicTests : IDisposable
     [Fact]
     public void Scenario22_EvidenceCorrelationEngine_Distinguishes6SoftwareStates()
     {
-        // Verify all 6 distinct software evidence states
-        Assert.Equal(6, Enum.GetValues<SoftwareEvidenceState>().Length);
+        // Verify all 7 distinct software evidence states
+        Assert.Equal(7, Enum.GetValues<SoftwareEvidenceState>().Length);
         Assert.True(Enum.IsDefined(typeof(SoftwareEvidenceState), SoftwareEvidenceState.SoftwarePresent));
         Assert.True(Enum.IsDefined(typeof(SoftwareEvidenceState), SoftwareEvidenceState.SoftwareInstalled));
         Assert.True(Enum.IsDefined(typeof(SoftwareEvidenceState), SoftwareEvidenceState.SoftwareExecuted));
         Assert.True(Enum.IsDefined(typeof(SoftwareEvidenceState), SoftwareEvidenceState.SoftwareActiveDuringSession));
         Assert.True(Enum.IsDefined(typeof(SoftwareEvidenceState), SoftwareEvidenceState.SoftwareInteractingWithMinecraft));
+        Assert.True(Enum.IsDefined(typeof(SoftwareEvidenceState), SoftwareEvidenceState.SoftwareContainsProhibitedCapabilities));
         Assert.True(Enum.IsDefined(typeof(SoftwareEvidenceState), SoftwareEvidenceState.ProhibitedFunctionalityUsed));
 
         // Verify 9 distinct evidence states
