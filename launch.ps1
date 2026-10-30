@@ -22,7 +22,7 @@ $exePath = Join-Path $targetDir "MinecraftSsForensics.exe"
 $shaPath = Join-Path $targetDir "MinecraftSsForensics.exe.sha256"
 
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host " Minecraft SS Forensics — Verified Launcher" -ForegroundColor White
+Write-Host " Minecraft SS Forensics - Verified Launcher" -ForegroundColor White
 Write-Host "==========================================================" -ForegroundColor Cyan
 
 try {
