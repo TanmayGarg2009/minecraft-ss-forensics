@@ -15,6 +15,9 @@ public class DiscoveredProcess
     public string? JavaVersion { get; set; }
     public bool IsGameProcess { get; set; }
     public bool IsLauncherProcess { get; set; }
+    public bool IsCheatProcess { get; set; }
+    public string? MatchedCheatName { get; set; }
+    public List<string> JavaAgents { get; set; } = new();
     public List<LoadedModuleInfo> LoadedModules { get; set; } = new();
     public bool HasAccessDenied { get; set; }
     public string? AccessLimitationNote { get; set; }

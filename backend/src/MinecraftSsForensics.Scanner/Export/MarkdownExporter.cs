@@ -9,6 +9,7 @@ namespace MinecraftSsForensics.Scanner.Export;
 /// <summary>
 /// Exports a StandaloneReport into an AI-friendly, 14-section Markdown investigation dossier.
 /// Contains verbatim AI Analysis Guide instructions separating facts from analytical inferences.
+/// Employs reconciled summary totals and the standardized 12-column findings structure.
 /// </summary>
 public static class MarkdownExporter
 {
@@ -37,20 +38,46 @@ public static class MarkdownExporter
         sb.AppendLine($"- **Browser History Audit Consented**: `{(report.Consent.InspectBrowserHistory ? "YES" : "NO (Sensitive Category Excluded)")}`");
         sb.AppendLine();
 
-        // 2. Scan Completeness & Limitations
-        sb.AppendLine("## 2. Scan Completeness and Limitations");
-        sb.AppendLine($"- **Total Diagnostic Checks**: `{report.SummaryCounts.TotalChecks}`");
-        sb.AppendLine($"- **Passed Checks**: `{report.SummaryCounts.PassedChecks}`");
-        sb.AppendLine($"- **Flagged Checks**: `{report.SummaryCounts.FlaggedChecks}`");
-        sb.AppendLine($"- **Skipped Checks**: `{report.SummaryCounts.SkippedChecks}`");
-        sb.AppendLine($"- **Unavailable Checks**: `{report.SummaryCounts.UnavailableChecks}`");
-        sb.AppendLine($"- **Errors**: `{report.SummaryCounts.ErrorChecks}`");
+        // 2. Reconciled Summary Totals
+        sb.AppendLine("## 2. Reconciled Summary Totals");
         sb.AppendLine();
-        sb.AppendLine("> **Forensic Boundary Notice:** This scanner operates exclusively in standard Windows user mode without kernel drivers or elevation. Deep system artifacts (such as Prefetch or raw NTFS USN journals) may report access denial on non-admin accounts. The presence of unavailable checks represents a boundary limitation, not proof of evasion or tampering.");
+        sb.AppendLine("| Metric Category | Count | Evidentiary Basis |");
+        sb.AppendLine("| :--- | :---: | :--- |");
+        sb.AppendLine($"| **Total Normalized Findings** | `{report.SummaryCounts.TotalFindings}` | Reconciled count across all forensic checks |");
+        sb.AppendLine($"| **Critical Severity** | `{report.SummaryCounts.Critical}` | Confirmed Minecraft-associated cheat software or injection |");
+        sb.AppendLine($"| **High Severity** | `{report.SummaryCounts.High}` | Prohibited possession violations or running cheat processes |");
+        sb.AppendLine($"| **Medium Severity** | `{report.SummaryCounts.Medium}` | Disk cheat files, unverified temporary modules, historical traces |");
+        sb.AppendLine($"| **Low Severity** | `{report.SummaryCounts.Low}` | Policy restrictions, browser history domain matches |");
+        sb.AppendLine($"| **Informational** | `{report.SummaryCounts.Informational}` | Hardware connections, diagnostic environment records |");
+        sb.AppendLine($"| **Confirmed Signatures** | `{report.SummaryCounts.ConfirmedSignatures}` | Matches against verified cheat signature catalog |");
+        sb.AppendLine($"| **Runtime Observations** | `{report.SummaryCounts.RuntimeObservations}` | Processes, injected modules, or active scan window telemetry |");
+        sb.AppendLine($"| **Disk-Only Findings** | `{report.SummaryCounts.DiskOnlyObservations}` | Files physically present on disk without runtime connection |");
+        sb.AppendLine($"| **Incomplete / Failed Checks** | `{report.SummaryCounts.IncompleteOrFailedChecks}` | Telemetry boundary limitations (Unavailable / Error) |");
         sb.AppendLine();
 
-        // 3. AI Analysis Guide
-        sb.AppendLine("## 3. AI Analysis Guide");
+        // 3. Investigation Verdict
+        sb.AppendLine("## 3. Investigation Verdict");
+        sb.AppendLine();
+        sb.AppendLine($"> ### **{report.Verdict.OverallAssessment}**");
+        sb.AppendLine($"> **Recommendation:** {report.Verdict.Recommendation}");
+        if (report.Verdict.KeyTakeaways.Count > 0)
+        {
+            sb.AppendLine(">");
+            sb.AppendLine("> **Key Takeaways:**");
+            foreach (var t in report.Verdict.KeyTakeaways)
+                sb.AppendLine($"> - {t}");
+        }
+        if (report.Verdict.UnansweredQuestions.Count > 0)
+        {
+            sb.AppendLine(">");
+            sb.AppendLine("> **Unanswered Questions:**");
+            foreach (var q in report.Verdict.UnansweredQuestions)
+                sb.AppendLine($"> - {q}");
+        }
+        sb.AppendLine();
+
+        // 4. AI Analysis Guide
+        sb.AppendLine("## 4. AI Analysis Guide");
         sb.AppendLine();
         sb.AppendLine("> **Instructions for AI Forensic Reviewer:**");
         sb.AppendLine("> You are reviewing a Minecraft screenshare forensic report. Analyze only the evidence contained in this report unless external research is explicitly requested.");
@@ -68,16 +95,10 @@ public static class MarkdownExporter
         sb.AppendLine("> Do not treat a file existing on disk as proof that it executed. Distinguish historical presence, current presence, process association, module loading, and evidence of actual behavior.");
         sb.AppendLine(">");
         sb.AppendLine("> Identify findings that deserve further investigation, explain possible false positives, and suggest concrete additional checks.");
-        sb.AppendLine(">");
-        sb.AppendLine("> Identify contradictions and gaps in the available evidence.");
-        sb.AppendLine(">");
-        sb.AppendLine("> Provide a concise executive summary, a prioritized list of findings, confidence explanations, and unanswered questions.");
-        sb.AppendLine(">");
-        sb.AppendLine("> Do not invent evidence or claim certainty beyond what the report supports.");
         sb.AppendLine();
 
-        // 4. Key Findings
-        sb.AppendLine("## 4. Key Findings");
+        // 5. Findings Table (12 Columns)
+        sb.AppendLine("## 5. Structured Forensic Findings Table");
         sb.AppendLine();
         if (report.Findings.Count == 0)
         {
@@ -86,124 +107,142 @@ public static class MarkdownExporter
         }
         else
         {
+            sb.AppendLine("| Severity | Finding | Category | Target Process | File/Module (Redacted) | Detection Method | Strength | Confidence | Timestamp | Interpretation | Limitations | Recommended Review |");
+            sb.AppendLine("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |");
+
+            foreach (var f in report.Findings)
+            {
+                string procStr = f.TargetProcessId.HasValue ? $"PID {f.TargetProcessId} ({f.TargetProcessName})" : "None";
+                string pathStr = !string.IsNullOrEmpty(f.GetRedactedPath()) ? $"`{Path.GetFileName(f.GetRedactedPath())}`" : "-";
+                string timeStr = f.ObservedTimestamp.HasValue ? f.ObservedTimestamp.Value.ToString("yyyy-MM-dd HH:mm") : "-";
+                if (f.IsInScanWindow) timeStr += " (Active)";
+
+                string interp = CleanCell(!string.IsNullOrEmpty(f.Interpretation) ? f.Interpretation : f.TechnicalExplanation);
+                string limits = CleanCell(!string.IsNullOrEmpty(f.Limitations) ? f.Limitations : f.WhatIsNotProven);
+                string review = CleanCell(!string.IsNullOrEmpty(f.RecommendedReview) ? f.RecommendedReview : f.SuggestedNextChecks);
+
+                sb.AppendLine($"| **{f.Severity}** | {CleanCell(f.Finding)} | {f.EvidenceCategory} | {procStr} | {pathStr} | {f.DetectionMethod} | {f.EvidenceStrength} | {f.Confidence} | {timeStr} | {interp} | {limits} | {review} |");
+            }
+            sb.AppendLine();
+
+            // Detailed Findings Dossier
+            sb.AppendLine("## 6. Detailed Finding Breakdown");
+            sb.AppendLine();
             for (int i = 0; i < report.Findings.Count; i++)
             {
                 var f = report.Findings[i];
-                sb.AppendLine($"### Finding {i + 1}: [{f.Classification.ToString().ToUpperInvariant()}] {f.DetectionName}");
+                sb.AppendLine($"### Finding {i + 1}: [{f.Severity}] {f.Finding}");
                 sb.AppendLine($"- **Rule ID**: `{f.RuleId}`");
-                sb.AppendLine($"- **Category**: `{f.Category}`");
-                sb.AppendLine($"- **Classification**: `{f.Classification}`");
+                sb.AppendLine($"- **Category**: `{f.EvidenceCategory}`");
+                sb.AppendLine($"- **Severity**: `{f.Severity}`");
+                sb.AppendLine($"- **Evidence Strength**: `{f.EvidenceStrength}`");
                 sb.AppendLine($"- **Confidence**: `{f.Confidence}`");
-                sb.AppendLine($"- **Evidence Source**: `{f.EvidenceSource}`");
+                sb.AppendLine($"- **Detection Method**: `{f.DetectionMethod}`");
+                sb.AppendLine($"- **Evidence Cluster ID**: `{f.EvidenceClusterId}`");
+                sb.AppendLine($"- **Target Process**: {(f.TargetProcessId.HasValue ? $"PID {f.TargetProcessId} ({f.TargetProcessName})" : "None")}");
+                sb.AppendLine($"- **File Path (Redacted)**: `{f.GetRedactedPath()}`");
+                if (!string.IsNullOrEmpty(f.FileSha256)) sb.AppendLine($"- **SHA-256 Digest**: `{f.FileSha256}`");
+                if (f.ObservedTimestamp.HasValue) sb.AppendLine($"- **Observed Timestamp**: `{f.ObservedTimestamp.Value:u}` (In Scan Window: `{f.IsInScanWindow}`)");
                 sb.AppendLine();
-                sb.AppendLine("**What was observed:**");
+                sb.AppendLine("**Technical Observation:**");
                 sb.AppendLine(f.TechnicalExplanation);
                 sb.AppendLine();
-                sb.AppendLine("**Supporting evidence:**");
-                if (!string.IsNullOrEmpty(f.FilePath)) sb.AppendLine($"- File Path: `{f.FilePath}`");
-                if (!string.IsNullOrEmpty(f.FileSha256)) sb.AppendLine($"- SHA-256 Digest: `{f.FileSha256}`");
-                if (f.FileSizeBytes.HasValue) sb.AppendLine($"- Size: `{f.FileSizeBytes.Value / 1024.0:F1} KB`");
-                if (f.ProcessId.HasValue) sb.AppendLine($"- Process: `{f.ProcessName}` (PID: `{f.ProcessId}`)");
+                sb.AppendLine("**Forensic Interpretation (What is proven):**");
+                sb.AppendLine(!string.IsNullOrEmpty(f.Interpretation) ? f.Interpretation : f.WhatIsProven);
                 sb.AppendLine();
-                sb.AppendLine("**Why it may matter:**");
-                sb.AppendLine(f.WhyItMatters);
+                sb.AppendLine("**Evidentiary Limitations (What is NOT proven):**");
+                sb.AppendLine(!string.IsNullOrEmpty(f.Limitations) ? f.Limitations : f.WhatIsNotProven);
                 sb.AppendLine();
-                sb.AppendLine("**Alternative explanations & false positives:**");
-                sb.AppendLine(string.IsNullOrWhiteSpace(f.AlternativeLegitimateExplanations)
-                    ? "- Software version differences or non-standard mod configuration."
-                    : f.AlternativeLegitimateExplanations);
-                sb.AppendLine();
-                sb.AppendLine("**What it does not prove:**");
-                sb.AppendLine(string.IsNullOrWhiteSpace(f.WhatIsNotProven)
-                    ? "- Does not prove intentional cheating during the specific competitive match."
-                    : f.WhatIsNotProven);
+                sb.AppendLine("**Recommended Staff Review:**");
+                sb.AppendLine(!string.IsNullOrEmpty(f.RecommendedReview) ? f.RecommendedReview : f.SuggestedNextChecks);
                 sb.AppendLine();
             }
         }
 
-        // 5. Minecraft Installations & Runtime
-        sb.AppendLine("## 5. Minecraft Installations and Environment Metadata");
+        // 7. Evidence Correlation Assessments
+        sb.AppendLine("## 7. Evidence Correlation Assessments");
         sb.AppendLine();
-        foreach (var inst in report.MinecraftInstallations)
+        if (report.CorrelatedAssessments.Count == 0)
         {
-            sb.AppendLine($"- **{inst.Name}**: `{inst.RootPath}` (Exists: `{inst.Exists}`, Launcher: `{inst.LauncherType}`)");
-        }
-        if (!string.IsNullOrEmpty(report.JavaRuntime.RawJvmArguments))
-        {
+            sb.AppendLine("No multi-source correlated software assessments recorded.");
             sb.AppendLine();
-            sb.AppendLine("### Parsed JVM Launch Arguments");
-            sb.AppendLine("```");
-            sb.AppendLine(report.JavaRuntime.RawJvmArguments);
-            sb.AppendLine("```");
         }
-        sb.AppendLine();
+        else
+        {
+            sb.AppendLine("| Software / Artifact | State | Policy | Violation? | What is Proven | Evidentiary Limitations |");
+            sb.AppendLine("| :--- | :--- | :--- | :---: | :--- | :--- |");
+            foreach (var a in report.CorrelatedAssessments)
+            {
+                sb.AppendLine($"| **{a.SoftwareName}** | `{a.State}` | `{a.Policy}` | `{(a.IsPolicyViolation ? "VIOLATION" : "COMPLIANT")}` | {CleanCell(a.WhatIsProven)} | {CleanCell(a.WhatIsNotProven)} |");
+            }
+            sb.AppendLine();
+        }
 
-        // 6. Complete Mod Inventory
-        sb.AppendLine("## 6. Complete Discovered Mod Inventory");
+        // 8. Mod Inventory
+        sb.AppendLine("## 8. Mod Inventory");
         sb.AppendLine();
         if (report.ModInventory.Count == 0)
         {
-            sb.AppendLine("No mod JAR records found in inspected game folders.");
+            sb.AppendLine("No mod JAR files discovered.");
+            sb.AppendLine();
         }
         else
         {
-            sb.AppendLine("| Mod Name | File Name | Size (KB) | SHA-256 | Authenticity | Policy |");
-            sb.AppendLine("| :--- | :--- | :--- | :--- | :--- | :--- |");
+            sb.AppendLine("| Mod Name | File Name | SHA-256 | Verification | Policy |");
+            sb.AppendLine("| :--- | :--- | :--- | :--- | :--- |");
             foreach (var m in report.ModInventory)
             {
-                string sha = !string.IsNullOrEmpty(m.Sha256) ? $"`{m.Sha256[..Math.Min(16, m.Sha256.Length)]}...`" : "-";
-                sb.AppendLine($"| **{m.Name}** | `{m.FileName}` | {m.FileSizeBytes / 1024.0:F1} | {sha} | `{m.VerificationState}` | `{m.GameplayPolicy}` |");
+                string hashShort = m.Sha256.Length >= 12 ? m.Sha256[..12] : m.Sha256;
+                sb.AppendLine($"| **{m.Name}** | `{m.FileName}` | `{hashShort}...` | `{m.VerificationState}` | `{m.GameplayPolicy}` |");
             }
+            sb.AppendLine();
+        }
+
+        // 9. Running Processes & Modules
+        sb.AppendLine("## 9. Active Processes and Runtime Modules");
+        sb.AppendLine();
+        foreach (var p in report.RunningProcesses)
+        {
+            sb.AppendLine($"- **PID {p.ProcessId}**: `{p.ProcessName}` (Path: `{p.ExecutablePath}`, Started: `{p.StartTime}`)");
         }
         sb.AppendLine();
 
-        // 7. Policy Compliance
-        sb.AppendLine("## 7. Server Policy Compliance");
+        // 10. Execution History & Staged Files
+        sb.AppendLine("## 10. Execution History and Staged Files");
         sb.AppendLine();
-        sb.AppendLine($"- Allowed: `{report.PolicyEvaluation.AllowedCount}` | Prohibited: `{report.PolicyEvaluation.ProhibitedCount}` | Restricted: `{report.PolicyEvaluation.RestrictedCount}` | Needs Review: `{report.PolicyEvaluation.NeedsReviewCount}`");
-        sb.AppendLine();
-
-        // 8. Runtime & Modules
-        sb.AppendLine("## 8. Process and Runtime Module Findings");
-        sb.AppendLine();
-        var tempMods = report.LoadedModules.Where(m => m.IsInTempDirectory).ToList();
-        if (tempMods.Count == 0)
+        foreach (var f in report.FileDiscoveries)
         {
-            sb.AppendLine("No dynamic libraries loaded from temporary directories.");
+            sb.AppendLine($"- **Staged File**: `{f.FileName}` in `{f.FilePath}` ({f.FileSizeBytes} bytes, Modified: `{f.LastModified:u}`)");
         }
-        else
+        foreach (var h in report.ExecutionHistory.Take(30))
         {
-            sb.AppendLine("| Module Name | Path | Provenance Assessment |");
-            sb.AppendLine("| :--- | :--- | :--- |");
-            foreach (var tm in tempMods)
-            {
-                sb.AppendLine($"| **{tm.ModuleName}** | `{tm.FilePath}` | {tm.ProvenanceAssessment} |");
-            }
+            sb.AppendLine($"- **[{h.Source}]** `{h.ApplicationName}`: `{h.Details}` ({h.LastExecutionTime})");
         }
         sb.AppendLine();
 
-        // 9. Diagnostics
-        sb.AppendLine("## 9. Failed, Skipped, or Unavailable Checks");
+        // 11. Collection Diagnostics
+        sb.AppendLine("## 11. Diagnostic Checks and Technical Limitations");
         sb.AppendLine();
-        var nonPassed = report.DiagnosticChecks.Where(c => c.Status != CheckStatus.PASSED).ToList();
-        if (nonPassed.Count == 0)
+        sb.AppendLine("| Check Name | Source | Status | Details |");
+        sb.AppendLine("| :--- | :--- | :--- | :--- |");
+        foreach (var d in report.DiagnosticChecks)
         {
-            sb.AppendLine("All scheduled diagnostic checks completed without error or access restriction.");
-        }
-        else
-        {
-            sb.AppendLine("| Check Name | Source | Status | Reason / Limitation |");
-            sb.AppendLine("| :--- | :--- | :--- | :--- |");
-            foreach (var np in nonPassed)
-            {
-                sb.AppendLine($"| **{np.CheckName}** | `{np.Source}` | `{np.Status}` | {np.Reason} |");
-            }
+            sb.AppendLine($"| **{d.CheckName}** | `{d.Source}` | `{d.Status}` | {CleanCell(d.Reason)} |");
         }
         sb.AppendLine();
-
-        sb.AppendLine("---");
-        sb.AppendLine("*Generated by Minecraft SS Forensics Standalone Edition.*");
 
         return sb.ToString();
+    }
+
+    public static void SaveToFile(StandaloneReport report, string filePath)
+    {
+        string md = ExportToMarkdown(report);
+        File.WriteAllText(filePath, md, Encoding.UTF8);
+    }
+
+    private static string CleanCell(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return "-";
+        return text.Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ").Trim();
     }
 }

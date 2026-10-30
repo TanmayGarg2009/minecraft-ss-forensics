@@ -301,54 +301,72 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
                 var cheatFileMatch = CheatDetectionDatabase.MatchFileName(fileName);
                 if (cheatFileMatch != null)
                 {
+                    string clusterId = "CLUSTER-" + (!string.IsNullOrEmpty(hashResult.Sha256) ? hashResult.Sha256[..Math.Min(12, hashResult.Sha256.Length)] : cheatFileMatch.Name.ToLowerInvariant().Replace(" ", "-"));
                     report.Findings.Add(new FindingRecord
                     {
                         RuleId = "CHEAT-JAR-FILENAME",
                         DetectionName = $"Known Cheat Client JAR on Disk: {cheatFileMatch.Name}",
+                        FindingTitle = $"Known Cheat Client JAR on Disk: {cheatFileMatch.Name}",
                         Category = FindingCategory.CheatArtifact,
+                        EvidenceCategory = EvidenceCategory.Disk,
                         Classification = FindingClassification.ConfirmedCheatArtifact,
-                        Severity = Severity.Critical,
+                        Severity = polEval.Policy == GameplayPolicy.PROHIBITED_POSSESSION ? Severity.High : Severity.Medium,
+                        EvidenceStrength = EvidenceStrength.Strong,
                         Confidence = ConfidenceLevel.Certain,
+                        DetectionMethod = DetectionMethod.ExactSignature,
                         EvidenceState = EvidenceState.CONFIRMED,
                         SoftwareState = SoftwareEvidenceState.SoftwareInstalled,
                         SoftwareStateDescription = "Known cheat client JAR is installed in the active Minecraft profile mods folder.",
-                        PolicyViolationScope = "PROHIBITED_POSSESSION",
+                        PolicyViolationScope = polEval.Policy == GameplayPolicy.PROHIBITED_POSSESSION ? "PROHIBITED_POSSESSION" : string.Empty,
                         EvidenceSource = "ModFolder",
                         FilePath = jarPath,
                         FileSha256 = hashResult.Sha256,
                         FileSizeBytes = hashResult.FileSizeBytes,
+                        IsInScanWindow = false,
+                        EvidenceClusterId = clusterId,
+                        Interpretation = $"Mod file '{fileName}' in active profile mods folder matches known cheat signature '{cheatFileMatch.Name}'.",
                         TechnicalExplanation = $"Mod archive '{fileName}' matches signature for '{cheatFileMatch.Name}'. Description: {cheatFileMatch.Description}",
                         WhyItMatters = "Known competitive cheat client found in active Minecraft mods directory.",
-                        AlternativeLegitimateExplanations = "None for verified cheat signatures.",
-                        WhatIsProven = "Cheat file was loaded in the mods directory.",
-                        WhatIsNotProven = "Does not prove in-game features were toggled during match without session correlation.",
-                        Limitations = "Presence in mods folder confirms installation, but does not prove features were toggled during match without session correlation."
+                        AlternativeLegitimateExplanations = "User may have downloaded file for review, testing, or unused on another game server.",
+                        WhatIsProven = "Cheat file was physically placed in the mods directory.",
+                        WhatIsNotProven = "Does not prove in-game features were toggled or loaded during match without session correlation.",
+                        Limitations = "Presence in mods folder confirms installation, but does not prove features were toggled during match without session correlation.",
+                        RecommendedReview = "Review active JVM process arguments and server match logs to verify if loaded."
                     });
                 }
                 else if (meta.MatchedCheatSignatures.Count > 0)
                 {
+                    string clusterId = "CLUSTER-BC-" + meta.MatchedCheatSignatures[0].ToLowerInvariant().Replace(" ", "-");
                     report.Findings.Add(new FindingRecord
                     {
                         RuleId = "CHEAT-BYTECODE-CLASS",
                         DetectionName = $"Cheat Bytecode / Class Match: {meta.MatchedCheatSignatures[0]}",
+                        FindingTitle = $"Cheat Bytecode / Class Match: {meta.MatchedCheatSignatures[0]}",
                         Category = FindingCategory.CheatArtifact,
+                        EvidenceCategory = EvidenceCategory.ModIntegrity,
                         Classification = FindingClassification.ConfirmedCheatArtifact,
-                        Severity = Severity.Critical,
+                        Severity = Severity.High,
+                        EvidenceStrength = EvidenceStrength.Strong,
                         Confidence = ConfidenceLevel.Certain,
+                        DetectionMethod = DetectionMethod.BytecodeStructure,
                         EvidenceState = EvidenceState.CONFIRMED,
-                        SoftwareState = SoftwareEvidenceState.SoftwareInstalled,
+                        SoftwareState = SoftwareEvidenceState.SoftwareContainsProhibitedCapabilities,
                         SoftwareStateDescription = "Archive contains internal classes matching known cheat package.",
                         PolicyViolationScope = "PROHIBITED_POSSESSION",
                         EvidenceSource = "JAR Archive Bytecode",
                         FilePath = jarPath,
                         FileSha256 = hashResult.Sha256,
                         FileSizeBytes = hashResult.FileSizeBytes,
+                        IsInScanWindow = false,
+                        EvidenceClusterId = clusterId,
+                        Interpretation = $"Mod archive '{fileName}' contains internal package/class bytecode matching known cheat: {string.Join(", ", meta.MatchedCheatSignatures)}.",
                         TechnicalExplanation = $"Archive '{fileName}' contains internal class matching known cheat package: {string.Join(", ", meta.MatchedCheatSignatures)}",
                         WhyItMatters = "Bytecode class analysis indicates modified or disguised cheat jar.",
                         AlternativeLegitimateExplanations = "Custom mod developer testing local build.",
                         WhatIsProven = "The mod archive contains cheat class bytecode.",
                         WhatIsNotProven = "Does not prove feature activation during gameplay.",
-                        Limitations = "Bytecode match proves internal capability and possession; does not prove feature activation during gameplay."
+                        Limitations = "Bytecode match proves internal capability and possession; does not prove feature activation during gameplay.",
+                        RecommendedReview = "Decompile classes to confirm if cheat functionality is active."
                     });
                 }
                 else if (polEval.Policy.IsProhibited())
@@ -357,10 +375,14 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
                     {
                         RuleId = "MOD-POLICY-PROHIBITED",
                         DetectionName = $"Prohibited Mod Under {activePolicy.Gamemode} Ruleset: {modItem.Name}",
-                        Category = FindingCategory.ModIntegrity,
+                        FindingTitle = $"Prohibited Mod Under {activePolicy.Gamemode} Ruleset: {modItem.Name}",
+                        Category = FindingCategory.PolicyViolation,
+                        EvidenceCategory = EvidenceCategory.PolicyViolation,
                         Classification = FindingClassification.ConfirmedCheatArtifact,
-                        Severity = Severity.High,
+                        Severity = polEval.Policy == GameplayPolicy.PROHIBITED_POSSESSION ? Severity.High : Severity.Medium,
+                        EvidenceStrength = EvidenceStrength.Strong,
                         Confidence = ConfidenceLevel.Certain,
+                        DetectionMethod = DetectionMethod.MetadataRule,
                         EvidenceState = EvidenceState.CONFIRMED,
                         SoftwareState = SoftwareEvidenceState.SoftwareInstalled,
                         SoftwareStateDescription = $"Mod is installed in active profile mods folder under {activePolicy.Gamemode} ruleset.",
@@ -369,6 +391,8 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
                         FilePath = jarPath,
                         FileSha256 = hashResult.Sha256,
                         FileSizeBytes = hashResult.FileSizeBytes,
+                        IsInScanWindow = false,
+                        Interpretation = $"Mod '{modItem.Name}' violates active {activePolicy.Gamemode} ruleset policy ({polEval.Policy}).",
                         TechnicalExplanation = $"Mod '{modItem.Name}' is prohibited under active {activePolicy.Gamemode} ruleset. Reason: {polEval.Reason}",
                         WhyItMatters = "Provides prohibited gameplay advantages in active competitive gamemode.",
                         AlternativeLegitimateExplanations = "Player may use this profile for other servers or singleplayer.",
@@ -376,7 +400,8 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
                         WhatIsNotProven = polEval.Policy == GameplayPolicy.PROHIBITED_POSSESSION
                             ? "Gameplay use is not proven, but is not required under the applicable possession policy."
                             : "Does not prove the feature was used during competition.",
-                        Limitations = polEval.Reason
+                        Limitations = polEval.Reason,
+                        RecommendedReview = "Review server rules and match timeline."
                     });
                 }
                 else if (meta.BytecodeAnalysis != null && meta.BytecodeAnalysis.HasAutomationCapabilities)
@@ -385,24 +410,31 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
                     {
                         RuleId = "MOD-BYTECODE-AUTOMATION",
                         DetectionName = $"Automation Capabilities in Mod Bytecode: {modItem.Name}",
+                        FindingTitle = $"Automation Capabilities in Mod Bytecode: {modItem.Name}",
                         Category = FindingCategory.ModIntegrity,
+                        EvidenceCategory = EvidenceCategory.ModIntegrity,
                         Classification = FindingClassification.NeedsReview,
                         Severity = Severity.Medium,
+                        EvidenceStrength = EvidenceStrength.Moderate,
                         Confidence = ConfidenceLevel.Certain,
+                        DetectionMethod = DetectionMethod.BytecodeStructure,
                         EvidenceState = EvidenceState.STRONG_INDICATOR,
-                        SoftwareState = SoftwareEvidenceState.SoftwareInstalled,
+                        SoftwareState = SoftwareEvidenceState.SoftwareContainsProhibitedCapabilities,
                         SoftwareStateDescription = "Mod archive contains constant pool bytecode references for automated combat, crystal placement, or packet manipulation.",
                         PolicyViolationScope = "NEEDS_REVIEW",
                         EvidenceSource = "StaticBytecodeAnalyzer",
                         FilePath = jarPath,
                         FileSha256 = hashResult.Sha256,
                         FileSizeBytes = hashResult.FileSizeBytes,
+                        IsInScanWindow = false,
+                        Interpretation = $"Bytecode contains structural capabilities: {string.Join(", ", meta.BytecodeAnalysis.DetectedCapabilities.Select(c => c.CapabilityType).Distinct())}.",
                         TechnicalExplanation = $"Static bytecode constant pool analysis identified capabilities: {string.Join(", ", meta.BytecodeAnalysis.DetectedCapabilities.Select(c => c.CapabilityType).Distinct())}.",
                         WhyItMatters = "Mod contains automation or packet manipulation structures that may violate competitive server policies.",
                         AlternativeLegitimateExplanations = "Mod may use mixins or packet listeners for legitimate quality-of-life or diagnostic features.",
                         WhatIsProven = "Archive contains structural capability bytecode.",
                         WhatIsNotProven = "Does NOT prove in-game use without runtime session correlation.",
-                        Limitations = "Structural bytecode capability does not establish in-game execution or toggling during matches."
+                        Limitations = "Structural bytecode capability does not establish in-game execution or toggling during matches.",
+                        RecommendedReview = "Inspect method call sites and mixin injection targets."
                     });
                 }
             }
@@ -411,24 +443,31 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
             var lookalikeFindings = _lookalikeDetector.AnalyzeMods(modsWithVerification);
             foreach (var lookalike in lookalikeFindings)
             {
-                // Renamed verified mod is purely informational; altered hash is suspicious
                 bool isAuthentic = lookalike.RuleId.StartsWith("INFO-", StringComparison.OrdinalIgnoreCase);
                 report.Findings.Add(new FindingRecord
                 {
                     RuleId = lookalike.RuleId,
                     DetectionName = lookalike.Title,
+                    FindingTitle = lookalike.Title,
                     Category = FindingCategory.ModIntegrity,
+                    EvidenceCategory = EvidenceCategory.ModIntegrity,
                     Classification = isAuthentic ? FindingClassification.Informational : FindingClassification.Suspicious,
                     Severity = isAuthentic ? Severity.Informational : Severity.High,
+                    EvidenceStrength = isAuthentic ? EvidenceStrength.Strong : EvidenceStrength.Moderate,
                     Confidence = isAuthentic ? ConfidenceLevel.Certain : ConfidenceLevel.High,
+                    DetectionMethod = isAuthentic ? DetectionMethod.HashMatch : DetectionMethod.MetadataRule,
                     EvidenceSource = lookalike.EvidenceSource,
                     FilePath = lookalike.FilePath,
                     FileSha256 = lookalike.FileSha256,
+                    IsInScanWindow = false,
+                    Interpretation = lookalike.Explanation,
                     TechnicalExplanation = lookalike.Explanation,
                     WhyItMatters = isAuthentic
                         ? "Mod file was renamed by user, but cryptographic hash confirms exact authentic release."
                         : "Potentially spoofed filename or duplicate mod ID masking custom or unlisted mod bytecode.",
-                    AlternativeLegitimateExplanations = "User launcher sorting or local build numbering."
+                    AlternativeLegitimateExplanations = "User launcher sorting or local build numbering.",
+                    Limitations = lookalike.Limitations,
+                    RecommendedReview = "Verify official publisher repository and hashes."
                 });
             }
 
@@ -501,19 +540,103 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
                             {
                                 RuleId = "PROC-SUSP-TEMP-MODULE",
                                 DetectionName = $"Unsigned Temporary DLL Loaded into javaw.exe: {mod.ModuleName}",
+                                FindingTitle = $"Unsigned Temporary DLL Loaded into javaw.exe: {mod.ModuleName}",
                                 Category = FindingCategory.ProcessInjection,
+                                EvidenceCategory = EvidenceCategory.LoadedModule,
                                 Classification = FindingClassification.Suspicious,
-                                Severity = Severity.High,
+                                Severity = Severity.Medium,
+                                EvidenceStrength = EvidenceStrength.Moderate,
                                 Confidence = ConfidenceLevel.Medium,
+                                DetectionMethod = DetectionMethod.RuntimeObservation,
+                                SoftwareState = SoftwareEvidenceState.SoftwareInteractingWithMinecraft,
+                                SoftwareStateDescription = "Unsigned DLL mapped into javaw.exe address space from temporary directory.",
                                 EvidenceSource = "ProcessMemoryMetadata",
                                 FilePath = mod.FilePath,
                                 ProcessId = proc.ProcessId,
                                 ProcessName = proc.ProcessName,
+                                IsInScanWindow = true,
+                                EvidenceClusterId = "CLUSTER-MOD-" + mod.ModuleName.ToLowerInvariant(),
+                                Interpretation = $"Process PID {proc.ProcessId} (javaw.exe) has loaded module '{mod.ModuleName}' from temporary directory without Java native library provenance.",
                                 TechnicalExplanation = $"Process PID {proc.ProcessId} (javaw.exe) has loaded module '{mod.FilePath}' from a temporary directory without Java native library provenance (JNA/LWJGL).",
                                 WhyItMatters = "Screenshare bypasses and injected cheat DLLs commonly load from temporary directories.",
                                 AlternativeLegitimateExplanations = "Custom third-party screen recorder, Discord overlay, or graphics driver hook.",
                                 WhatIsProven = "Module was mapped into javaw.exe process memory.",
-                                WhatIsNotProven = "Does not prove malicious intent without reverse-engineering module exports."
+                                WhatIsNotProven = "Does not prove malicious intent without reverse-engineering module exports.",
+                                Limitations = "Module mapping indicates memory presence, but does not prove malicious intent or packet modification without reverse engineering.",
+                                RecommendedReview = "Examine module export table, digital signature, and parent process."
+                            });
+                        }
+                    }
+
+                    // Audit JVM -javaagent arguments
+                    foreach (var agent in proc.JavaAgents)
+                    {
+                        var agentSig = CheatDetectionDatabase.MatchFileName(Path.GetFileName(agent));
+                        bool isTemp = agent.Contains(@"\Temp\", StringComparison.OrdinalIgnoreCase) ||
+                                      agent.Contains(@"/temp/", StringComparison.OrdinalIgnoreCase);
+
+                        if (agentSig != null)
+                        {
+                            report.Findings.Add(new FindingRecord
+                            {
+                                RuleId = "PROC-CHEAT-JAVA-AGENT",
+                                DetectionName = $"Known Cheat Java Agent Loaded: {agentSig.Name}",
+                                FindingTitle = $"Known Cheat Java Agent Loaded: {agentSig.Name}",
+                                Category = FindingCategory.JvmEnvironment,
+                                EvidenceCategory = EvidenceCategory.Injected,
+                                Classification = FindingClassification.ConfirmedCheatArtifact,
+                                Severity = Severity.Critical,
+                                EvidenceStrength = EvidenceStrength.Strong,
+                                Confidence = ConfidenceLevel.Certain,
+                                DetectionMethod = DetectionMethod.RuntimeObservation,
+                                SoftwareState = SoftwareEvidenceState.SoftwareActiveDuringSession,
+                                SoftwareStateDescription = $"Java Agent matching known cheat '{agentSig.Name}' passed via -javaagent to javaw.exe.",
+                                EvidenceSource = "JvmArguments",
+                                FilePath = agent,
+                                ProcessId = proc.ProcessId,
+                                ProcessName = proc.ProcessName,
+                                IsInScanWindow = true,
+                                EvidenceClusterId = "CLUSTER-AGENT-" + agentSig.Name.ToLowerInvariant().Replace(" ", "-"),
+                                Interpretation = $"A Java Agent matching known cheat '{agentSig.Name}' was loaded into the running Minecraft JVM (PID {proc.ProcessId}).",
+                                TechnicalExplanation = $"Command line arguments for javaw.exe (PID {proc.ProcessId}) include -javaagent pointing to cheat '{agentSig.Name}' at '{agent}'.",
+                                WhyItMatters = "Java agents possess full bytecode instrumentation capabilities to intercept and modify game classes at runtime.",
+                                AlternativeLegitimateExplanations = "None for verified cheat signatures.",
+                                WhatIsProven = "Java Agent was passed directly to the active Minecraft process.",
+                                WhatIsNotProven = "Does not prove individual features were toggled during a specific match moment.",
+                                Limitations = "JVM argument proves agent was attached at launch.",
+                                RecommendedReview = "Review launcher profile configuration and parent process."
+                            });
+                        }
+                        else if (isTemp)
+                        {
+                            report.Findings.Add(new FindingRecord
+                            {
+                                RuleId = "PROC-SUSP-JAVA-AGENT",
+                                DetectionName = $"Unverified Java Agent Loaded from Temp: {Path.GetFileName(agent)}",
+                                FindingTitle = $"Unverified Java Agent Loaded from Temp: {Path.GetFileName(agent)}",
+                                Category = FindingCategory.JvmEnvironment,
+                                EvidenceCategory = EvidenceCategory.Injected,
+                                Classification = FindingClassification.Suspicious,
+                                Severity = Severity.High,
+                                EvidenceStrength = EvidenceStrength.Moderate,
+                                Confidence = ConfidenceLevel.Medium,
+                                DetectionMethod = DetectionMethod.RuntimeObservation,
+                                SoftwareState = SoftwareEvidenceState.SoftwareActiveDuringSession,
+                                SoftwareStateDescription = "Java Agent loaded from temporary directory.",
+                                EvidenceSource = "JvmArguments",
+                                FilePath = agent,
+                                ProcessId = proc.ProcessId,
+                                ProcessName = proc.ProcessName,
+                                IsInScanWindow = true,
+                                EvidenceClusterId = "CLUSTER-AGENT-" + Path.GetFileNameWithoutExtension(agent).ToLowerInvariant(),
+                                Interpretation = $"Unverified Java Agent '{Path.GetFileName(agent)}' loaded from temporary directory into javaw.exe.",
+                                TechnicalExplanation = $"Process PID {proc.ProcessId} (javaw.exe) was launched with -javaagent targeting temporary path '{agent}'.",
+                                WhyItMatters = "Attackers frequently stage bytecode modification agents in %TEMP% to evade static mod folder scanning.",
+                                AlternativeLegitimateExplanations = "Custom launcher or diagnostic profiler agent.",
+                                WhatIsProven = "Java Agent was attached to the active game process.",
+                                WhatIsNotProven = "Intent requires bytecode decompilation of the agent JAR.",
+                                Limitations = "Detects argument attachment; requires archive inspection.",
+                                RecommendedReview = "Inspect agent archive bytecode and manifest."
                             });
                         }
                     }
@@ -648,19 +771,39 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
         var correlatedAssessments = _correlationEngine.Correlate(report, activePolicy);
         report.CorrelatedAssessments.AddRange(correlatedAssessments);
 
-        // Add policy violation findings identified through correlation (such as possession-prohibited staged files)
+        // Add or update policy violation findings identified through correlation
         foreach (var assessment in correlatedAssessments.Where(a => a.IsPolicyViolation))
         {
-            if (!report.Findings.Any(f => f.DetectionName.Contains(assessment.SoftwareName, StringComparison.OrdinalIgnoreCase)))
+            var existing = report.Findings.FirstOrDefault(f => f.DetectionName.Contains(assessment.SoftwareName, StringComparison.OrdinalIgnoreCase));
+            if (existing != null)
             {
+                existing.PolicyViolationScope = assessment.Policy.ToString();
+                if (assessment.Policy == GameplayPolicy.PROHIBITED_POSSESSION && existing.Severity < Severity.High)
+                {
+                    existing.Severity = Severity.High;
+                }
+                existing.TechnicalExplanation += $" • Policy Violation: {assessment.PolicyEvaluationExplanation}";
+            }
+            else
+            {
+                var evidenceCat = assessment.State == SoftwareEvidenceState.SoftwarePresent ? EvidenceCategory.Disk :
+                                  assessment.State == SoftwareEvidenceState.SoftwareActiveDuringSession ? EvidenceCategory.ActiveInScanWindow :
+                                  assessment.State == SoftwareEvidenceState.SoftwareInteractingWithMinecraft ? EvidenceCategory.Injected :
+                                  assessment.State == SoftwareEvidenceState.SoftwareExecuted ? EvidenceCategory.RunningProcess :
+                                  EvidenceCategory.PolicyViolation;
+
                 report.Findings.Add(new FindingRecord
                 {
                     RuleId = assessment.Policy == GameplayPolicy.PROHIBITED_POSSESSION ? "POLICY-POSSESSION-VIOLATION" : "POLICY-CORRELATED-VIOLATION",
                     DetectionName = $"Policy Violation ({assessment.Policy}): {assessment.SoftwareName}",
+                    FindingTitle = $"Policy Violation ({assessment.Policy}): {assessment.SoftwareName}",
                     Category = FindingCategory.PolicyViolation,
+                    EvidenceCategory = evidenceCat,
                     Classification = FindingClassification.ConfirmedCheatArtifact,
-                    Severity = Severity.Critical,
+                    Severity = (evidenceCat == EvidenceCategory.ActiveInScanWindow || evidenceCat == EvidenceCategory.Injected) ? Severity.Critical : Severity.High,
+                    EvidenceStrength = EvidenceStrength.Strong,
                     Confidence = assessment.Confidence,
+                    DetectionMethod = DetectionMethod.MetadataRule,
                     EvidenceState = EvidenceState.CONFIRMED,
                     SoftwareState = assessment.State,
                     SoftwareStateDescription = assessment.StateDescription,
@@ -668,12 +811,16 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
                     EvidenceSource = "EvidenceCorrelationEngine",
                     FilePath = assessment.FilePath,
                     FileSha256 = assessment.Sha256,
+                    IsInScanWindow = evidenceCat == EvidenceCategory.ActiveInScanWindow || evidenceCat == EvidenceCategory.Injected,
+                    EvidenceClusterId = "CLUSTER-" + assessment.SoftwareName.ToLowerInvariant().Replace(" ", "-"),
+                    Interpretation = assessment.WhatIsProven,
                     TechnicalExplanation = assessment.PolicyEvaluationExplanation,
                     WhyItMatters = $"Server policy for {activePolicy.Gamemode} prohibits {assessment.Policy.ToString().ToLowerInvariant().Replace('_', ' ')} of this software.",
                     AlternativeLegitimateExplanations = assessment.AlternativeLegitimateExplanations,
                     WhatIsProven = assessment.WhatIsProven,
                     WhatIsNotProven = assessment.WhatIsNotProven,
                     Limitations = "Correlation binds presence or execution evidence to policy rules.",
+                    RecommendedReview = "Review policy documentation and player history.",
                     RelatedEvidenceIds = assessment.SupportingEvidenceIds
                 });
             }
@@ -684,28 +831,60 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
         report.ScanCompletedAt = DateTimeOffset.UtcNow;
         report.ScanDurationMs = stopwatch.ElapsedMilliseconds;
 
-        // Formulate Investigation Verdict
+        // Formulate Differentiated Investigation Verdict
         report.RecomputeSummaryCounts();
-        if (report.SummaryCounts.ConfirmedCheats > 0)
+
+        bool hasMinecraftAssociatedCheat = report.Findings.Any(f =>
+            (f.Classification == FindingClassification.ConfirmedCheatArtifact || f.Severity == Severity.Critical) &&
+            (f.EvidenceCategory == EvidenceCategory.Injected ||
+             f.EvidenceCategory == EvidenceCategory.ActiveInScanWindow ||
+             (f.TargetProcessName != null && f.TargetProcessName.Contains("javaw", StringComparison.OrdinalIgnoreCase) && f.EvidenceCategory != EvidenceCategory.Disk)));
+
+        bool hasSuspiciousRuntime = report.Findings.Any(f =>
+            (f.Classification == FindingClassification.Suspicious || f.Classification == FindingClassification.NeedsReview || f.Severity >= Severity.Medium) &&
+            (f.EvidenceCategory == EvidenceCategory.RunningProcess ||
+             f.EvidenceCategory == EvidenceCategory.LoadedModule ||
+             f.EvidenceCategory == EvidenceCategory.Injected ||
+             f.EvidenceCategory == EvidenceCategory.ActiveInScanWindow));
+
+        bool hasProhibitedArtifactDiskOrHistory = report.Findings.Any(f =>
+            (f.Classification == FindingClassification.ConfirmedCheatArtifact || f.Severity >= Severity.Medium) &&
+            (f.EvidenceCategory == EvidenceCategory.Disk || f.EvidenceCategory == EvidenceCategory.Historical || f.EvidenceCategory == EvidenceCategory.FileDeletion));
+
+        bool hasUnavailableRequiredTelemetry = report.SummaryCounts.IncompleteOrFailedChecks > 0 &&
+            report.DiagnosticChecks.Any(c => (c.CheckId == "CHK-PROCESS-MODULES" || c.CheckId == "CHK-FILE-DISCOVERY") &&
+                                            (c.Status == CheckStatus.UNAVAILABLE || c.Status == CheckStatus.ERROR));
+
+        if (hasMinecraftAssociatedCheat)
         {
-            report.Verdict.OverallAssessment = "CONFIRMED CHEAT ARTIFACTS DETECTED";
-            report.Verdict.Recommendation = $"{report.SummaryCounts.ConfirmedCheats} confirmed cheat artifact(s) discovered on system. Immediate staff review required.";
-            report.Verdict.KeyTakeaways.Add("Identified direct cryptographic, class name, or filename matches for known Minecraft cheat software.");
+            report.Verdict.OverallAssessment = InvestigationVerdict.StrongEvidenceMinecraft;
+            report.Verdict.Recommendation = "Confirmed prohibited cheat artifact with direct runtime association to the Minecraft process. Immediate review required.";
+            report.Verdict.KeyTakeaways.Add("Verified technical connection (Java agent, memory module, or active session loading) between cheat software and Minecraft.");
         }
-        else if (report.SummaryCounts.StrongIndicators > 0)
+        else if (hasSuspiciousRuntime)
         {
-            report.Verdict.OverallAssessment = "STRONG SUSPICIOUS INDICATORS IDENTIFIED";
-            report.Verdict.Recommendation = "Identified execution traces matching known cheat utilities. Correlate timestamps with game session.";
+            report.Verdict.OverallAssessment = InvestigationVerdict.SuspiciousRuntimeReview;
+            report.Verdict.Recommendation = "Identified suspicious runtime processes or unverified memory modules executing during scan. Human staff review required.";
+            report.Verdict.KeyTakeaways.Add("Runtime observations require verification of module provenance and active process behavior.");
         }
-        else if (report.SummaryCounts.ProhibitedMods > 0 || correlatedAssessments.Any(a => a.IsPolicyViolation))
+        else if (hasProhibitedArtifactDiskOrHistory)
         {
-            report.Verdict.OverallAssessment = "SERVER POLICY VIOLATION (PROHIBITED MODS / SOFTWARE)";
-            report.Verdict.Recommendation = $"Discovered software strictly prohibited under active {activePolicy.Gamemode} ruleset.";
+            report.Verdict.OverallAssessment = InvestigationVerdict.ProhibitedArtifactNotActive;
+            report.Verdict.Recommendation = "Prohibited software artifact or historical execution trace identified on system. No active runtime association with Minecraft was observed during this scan.";
+            report.Verdict.KeyTakeaways.Add("Confirmed file on disk or historical execution artifact; no proof of runtime activity in the inspected Minecraft session.");
+            report.Verdict.UnansweredQuestions.Add("Did the player use this software during earlier unmonitored matches or outside this server?");
+        }
+        else if (hasUnavailableRequiredTelemetry)
+        {
+            report.Verdict.OverallAssessment = InvestigationVerdict.InconclusiveTelemetry;
+            report.Verdict.Recommendation = "Critical forensic telemetry was restricted or inaccessible in current scan context. Investigation is inconclusive.";
+            report.Verdict.KeyTakeaways.Add("One or more required diagnostic collectors could not access system telemetry.");
         }
         else
         {
-            report.Verdict.OverallAssessment = "NO EVIDENCE OF CHEATING DETECTED";
-            report.Verdict.Recommendation = "No confirmed cheat software, suspicious temp injections, or policy violations found in inspected scope.";
+            report.Verdict.OverallAssessment = InvestigationVerdict.NoProhibitedIndicators;
+            report.Verdict.Recommendation = "All evaluated checks completed normally. No known prohibited cheat software, suspicious temp injections, or policy violations found in inspected scope.";
+            report.Verdict.KeyTakeaways.Add("No confirmed signatures or anomalous runtime modules detected within tested coverage.");
         }
 
         // Cryptographic Seal

@@ -1,3 +1,4 @@
+using System;
 using System.Text.RegularExpressions;
 
 namespace MinecraftSsForensics.Scanner.Process;
@@ -28,6 +29,14 @@ public static class CommandLineRedactor
         @"(-D(?:auth|token|secret|password|key)[^\s=]*=)(\S+)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    private static readonly Regex WindowsUserPathRegex = new(
+        @"([A-Za-z]:\\Users\\)[^\\]+(\\)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex UnixUserPathRegex = new(
+        @"(/home/)[^/]+(/)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     public static string Redact(string commandLine)
     {
         if (string.IsNullOrWhiteSpace(commandLine))
@@ -42,6 +51,20 @@ public static class CommandLineRedactor
         redacted = PasswordRegex.Replace(redacted, "$1[REDACTED_PASSWORD]");
         redacted = JvmPropertySecretRegex.Replace(redacted, "$1[REDACTED_SECRET]");
 
+        return redacted;
+    }
+
+    /// <summary>
+    /// Redacts personal user profile directory names from file paths while preserving the subpath.
+    /// Example: C:\Users\JohnDoe\AppData\Local\Temp\mod.jar -> C:\Users\[REDACTED_USER]\AppData\Local\Temp\mod.jar
+    /// </summary>
+    public static string RedactPath(string? filePath)
+    {
+        if (string.IsNullOrWhiteSpace(filePath))
+            return string.Empty;
+
+        string redacted = WindowsUserPathRegex.Replace(filePath, "${1}[REDACTED_USER]${2}");
+        redacted = UnixUserPathRegex.Replace(redacted, "${1}[REDACTED_USER]${2}");
         return redacted;
     }
 }

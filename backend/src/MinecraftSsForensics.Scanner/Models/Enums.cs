@@ -15,7 +15,7 @@ public enum FindingClassification
 }
 
 /// <summary>
-/// Categories of forensic evidence discovered.
+/// High-level categories of forensic evidence discovered.
 /// </summary>
 public enum FindingCategory
 {
@@ -31,6 +31,99 @@ public enum FindingCategory
     UsbArtifact,
     BrowserHistory,
     Other
+}
+
+/// <summary>
+/// Primary evidence categories strictly separating disk presence from runtime interaction.
+/// </summary>
+public enum EvidenceCategory
+{
+    /// <summary>
+    /// File physically exists on disk (e.g. Downloads, Desktop, Temp, Mods folder).
+    /// </summary>
+    Disk,
+
+    /// <summary>
+    /// An executable process is currently running on the operating system.
+    /// </summary>
+    RunningProcess,
+
+    /// <summary>
+    /// A dynamic-link library or module is loaded into process virtual address space.
+    /// </summary>
+    LoadedModule,
+
+    /// <summary>
+    /// Direct injection or cross-process interaction established with Minecraft process.
+    /// </summary>
+    Injected,
+
+    /// <summary>
+    /// Verified active during the scan window or ongoing Minecraft game session.
+    /// </summary>
+    ActiveInScanWindow,
+
+    /// <summary>
+    /// Historical execution artifact (Prefetch, BAM, UserAssist) prior to scan window.
+    /// </summary>
+    Historical,
+
+    /// <summary>
+    /// JVM arguments, Java agents, classpath entries, or runtime environment flags.
+    /// </summary>
+    JvmEnvironment,
+
+    /// <summary>
+    /// Minecraft mod archive structure, metadata, or authenticity verification.
+    /// </summary>
+    ModIntegrity,
+
+    /// <summary>
+    /// Specific rule violation under the active server gameplay policy.
+    /// </summary>
+    PolicyViolation,
+
+    /// <summary>
+    /// Artifact deleted or moved to Recycle Bin.
+    /// </summary>
+    FileDeletion,
+
+    /// <summary>
+    /// Scanner integrity check or diagnostic telemetry limitation.
+    /// </summary>
+    IntegrityOrDiagnostic,
+
+    /// <summary>
+    /// Other unclassified evidence category.
+    /// </summary>
+    Other
+}
+
+/// <summary>
+/// Detection methodology utilized to discover or verify evidence.
+/// </summary>
+public enum DetectionMethod
+{
+    ExactSignature,
+    HashMatch,
+    MetadataRule,
+    RuntimeObservation,
+    BytecodeStructure,
+    HistoricalArtifact,
+    Heuristic,
+    ManualInspection,
+    Other
+}
+
+/// <summary>
+/// Evidentiary strength of an individual finding.
+/// </summary>
+public enum EvidenceStrength
+{
+    Strong,
+    Moderate,
+    Weak,
+    Inconclusive
 }
 
 public enum Severity

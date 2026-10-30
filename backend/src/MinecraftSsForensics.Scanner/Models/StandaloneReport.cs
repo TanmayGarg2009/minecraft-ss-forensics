@@ -100,6 +100,7 @@ public class StandaloneReport
 
     /// <summary>
     /// Recalculates and enforces mathematical internal consistency between checks, findings, and summaries.
+    /// All severity and evidence category totals are strictly derived from normalized findings.
     /// </summary>
     public void RecomputeSummaryCounts()
     {
@@ -109,13 +110,32 @@ public class StandaloneReport
         SummaryCounts.SkippedChecks = DiagnosticChecks.Count(c => c.Status == CheckStatus.SKIPPED);
         SummaryCounts.UnavailableChecks = DiagnosticChecks.Count(c => c.Status == CheckStatus.UNAVAILABLE);
         SummaryCounts.ErrorChecks = DiagnosticChecks.Count(c => c.Status == CheckStatus.ERROR);
+        SummaryCounts.IncompleteOrFailedChecks = DiagnosticChecks.Count(c => c.Status == CheckStatus.UNAVAILABLE || c.Status == CheckStatus.ERROR);
 
         SummaryCounts.TotalFindings = Findings.Count;
+        SummaryCounts.Critical = Findings.Count(f => f.Severity == Severity.Critical);
+        SummaryCounts.High = Findings.Count(f => f.Severity == Severity.High);
+        SummaryCounts.Medium = Findings.Count(f => f.Severity == Severity.Medium);
+        SummaryCounts.Low = Findings.Count(f => f.Severity == Severity.Low);
+
         SummaryCounts.ConfirmedCheats = Findings.Count(f => f.Classification == FindingClassification.ConfirmedCheatArtifact);
         SummaryCounts.StrongIndicators = Findings.Count(f => f.Classification == FindingClassification.StrongIndicator);
         SummaryCounts.Suspicious = Findings.Count(f => f.Classification == FindingClassification.Suspicious);
         SummaryCounts.NeedsReview = Findings.Count(f => f.Classification == FindingClassification.NeedsReview);
         SummaryCounts.Informational = Findings.Count(f => f.Classification == FindingClassification.Informational);
+
+        SummaryCounts.ConfirmedSignatures = Findings.Count(f =>
+            f.Classification == FindingClassification.ConfirmedCheatArtifact ||
+            f.DetectionMethod == DetectionMethod.ExactSignature);
+
+        SummaryCounts.RuntimeObservations = Findings.Count(f =>
+            f.EvidenceCategory == EvidenceCategory.RunningProcess ||
+            f.EvidenceCategory == EvidenceCategory.LoadedModule ||
+            f.EvidenceCategory == EvidenceCategory.Injected ||
+            f.EvidenceCategory == EvidenceCategory.ActiveInScanWindow);
+
+        SummaryCounts.DiskOnlyObservations = Findings.Count(f =>
+            f.EvidenceCategory == EvidenceCategory.Disk);
 
         SummaryCounts.VerifiedMods = ModInventory.Count(m => m.Verified);
         SummaryCounts.UnverifiedMods = ModInventory.Count(m => !m.Verified);
@@ -313,20 +333,36 @@ public class EvidenceReferenceItem
 
 public class ReportSummaryCounts
 {
+    // Diagnostic check metrics
     public int TotalChecks { get; set; }
     public int PassedChecks { get; set; }
     public int FlaggedChecks { get; set; }
     public int SkippedChecks { get; set; }
     public int UnavailableChecks { get; set; }
     public int ErrorChecks { get; set; }
+    public int IncompleteOrFailedChecks { get; set; }
 
+    // Reconciled findings severity breakdown (sums to TotalFindings)
     public int TotalFindings { get; set; }
+    public int Critical { get; set; }
+    public int High { get; set; }
+    public int Medium { get; set; }
+    public int Low { get; set; }
+    public int Informational { get; set; }
+
+    // Findings classification breakdown
     public int ConfirmedCheats { get; set; }
     public int StrongIndicators { get; set; }
     public int Suspicious { get; set; }
     public int NeedsReview { get; set; }
-    public int Informational { get; set; }
 
+    // Reconciled core forensic categories
+    public int ConfirmedSignatures { get; set; }
+    public int RuntimeObservations { get; set; }
+    public int DiskOnlyObservations { get; set; }
+    public int DiskOnly { get => DiskOnlyObservations; set => DiskOnlyObservations = value; }
+
+    // Mod inventory metrics
     public int VerifiedMods { get; set; }
     public int UnverifiedMods { get; set; }
     public int ProhibitedMods { get; set; }
@@ -334,8 +370,14 @@ public class ReportSummaryCounts
 
 public class InvestigationVerdict
 {
-    public string OverallAssessment { get; set; } = "NO EVIDENCE OF CHEATING DETECTED";
-    public string Recommendation { get; set; } = "No policy violations or cheat software found in active scope.";
+    public const string StrongEvidenceMinecraft = "Strong evidence of a known prohibited artifact associated with the Minecraft process";
+    public const string SuspiciousRuntimeReview = "Suspicious runtime evidence requires review";
+    public const string ProhibitedArtifactNotActive = "Known prohibited artifact identified; runtime activity not established";
+    public const string InconclusiveTelemetry = "Inconclusive because required telemetry was unavailable";
+    public const string NoProhibitedIndicators = "No known prohibited indicators detected within the scanner's tested coverage";
+
+    public string OverallAssessment { get; set; } = NoProhibitedIndicators;
+    public string Recommendation { get; set; } = "No known prohibited indicators detected within the scanner's tested coverage.";
     public List<string> KeyTakeaways { get; set; } = new();
     public List<string> UnansweredQuestions { get; set; } = new();
 }

@@ -104,25 +104,39 @@ public class FileDiscoveryScanner
                     };
                     items.Add(item);
 
+                    string clusterId = "CLUSTER-" + (!string.IsNullOrEmpty(sha256) ? sha256[..Math.Min(12, sha256.Length)] : sig.Name.ToLowerInvariant().Replace(" ", "-"));
+
                     findings.Add(new FindingRecord
                     {
                         RuleId = "FILE-CHEAT-NAME-MATCH",
                         DetectionName = $"Known Cheat Artifact on Disk: {sig.Name}",
+                        FindingTitle = $"Known Cheat Artifact on Disk: {sig.Name}",
                         Category = FindingCategory.CheatArtifact,
+                        EvidenceCategory = EvidenceCategory.Disk,
                         Classification = FindingClassification.ConfirmedCheatArtifact,
-                        Severity = Severity.High,
+                        Severity = Severity.Medium,
+                        EvidenceStrength = EvidenceStrength.Strong,
                         Confidence = ConfidenceLevel.Certain,
+                        DetectionMethod = DetectionMethod.ExactSignature,
+                        SoftwareState = SoftwareEvidenceState.SoftwarePresent,
+                        SoftwareStateDescription = $"Physical file present on disk in '{dirInfo.FullName}'.",
                         EvidenceSource = $"File System ({dirInfo.Name})",
                         FilePath = file.FullName,
                         FileSha256 = sha256,
+                        FileSizeBytes = file.Length,
                         ObservedTimestamp = file.LastWriteTimeUtc,
+                        IsInScanWindow = false,
+                        EvidenceClusterId = clusterId,
+                        Interpretation = $"A file matching known cheat signature '{sig.Name}' is physically stored on disk in '{dirInfo.FullName}'.",
                         TechnicalExplanation = $"File '{file.Name}' in '{dirInfo.FullName}' matches known cheat signature '{sig.Name}'. Description: {sig.Description}",
                         WhyItMatters = "Known cheat executables and modified client loaders indicate possession of prohibited advantage software.",
-                        AlternativeLegitimateExplanations = "File may have been downloaded for review, testing, or unused on another game server.",
+                        AlternativeLegitimateExplanations = "File may have been downloaded for review, testing, joke, or unused on another game server.",
                         WhatIsProven = "The file is physically present in the player's file system.",
-                        WhatIsNotProven = "Does not prove the cheat was active or running during the competitive match without process or execution logs.",
+                        WhatIsNotProven = "Does not prove the cheat was installed into Minecraft, launched, or active during the competitive match without process or execution logs.",
+                        Limitations = "File presence on disk establishes physical possession only. It does NOT establish that the software executed or interacted with Minecraft.",
+                        RecommendedReview = "Review running processes, loaded modules, and historical execution artifacts (Prefetch/BAM) to establish whether runtime activity occurred.",
                         EvidenceStrengtheningFinding = "Prefetch or BAM execution timestamp during the match timeframe.",
-                        EvidenceWeakeningFinding = "File has never been executed (no Prefetch / BAM records) and last modified date is months old."
+                        EvidenceWeakeningFinding = "File has never been executed (no Prefetch / BAM records) and last modified date is old."
                     });
                 }
             }
@@ -201,18 +215,30 @@ public class FileDiscoveryScanner
                                 };
                                 items.Add(item);
 
+                                string recycleClusterId = "CLUSTER-" + (!string.IsNullOrEmpty(sha256) ? sha256[..Math.Min(12, sha256.Length)] : sig.Name.ToLowerInvariant().Replace(" ", "-"));
+
                                 findings.Add(new FindingRecord
                                 {
                                     RuleId = "RECYCLE-BIN-CHEAT-DELETED",
                                     DetectionName = $"Cheat Artifact Recovered from Recycle Bin: {sig.Name}",
+                                    FindingTitle = $"Cheat Artifact Recovered from Recycle Bin: {sig.Name}",
                                     Category = FindingCategory.FileDeletion,
+                                    EvidenceCategory = EvidenceCategory.Disk,
                                     Classification = FindingClassification.ConfirmedCheatArtifact,
-                                    Severity = Severity.High,
+                                    Severity = Severity.Medium,
+                                    EvidenceStrength = EvidenceStrength.Strong,
                                     Confidence = ConfidenceLevel.Certain,
+                                    DetectionMethod = DetectionMethod.ExactSignature,
+                                    SoftwareState = SoftwareEvidenceState.SoftwarePresent,
+                                    SoftwareStateDescription = "Deleted cheat file metadata recovered from $Recycle.Bin.",
                                     EvidenceSource = $"Recycle Bin ({drive.Name.TrimEnd('\\')})",
                                     FilePath = meta.OriginalFilePath,
                                     FileSha256 = sha256,
+                                    FileSizeBytes = fileSize,
                                     ObservedTimestamp = meta.DeletionTimestamp,
+                                    IsInScanWindow = false,
+                                    EvidenceClusterId = recycleClusterId,
+                                    Interpretation = $"A deleted file matching known cheat signature '{sig.Name}' was discovered in $Recycle.Bin on drive {drive.Name.TrimEnd('\\')}.",
                                     TechnicalExplanation = $"Recovered deleted cheat artifact from $Recycle.Bin metadata index '{iFile.Name}'. " +
                                         $"Original Path: '{meta.OriginalFilePath}'. Exact Deletion Timestamp: {meta.DeletionTimestamp:yyyy-MM-dd HH:mm:ss} UTC. " +
                                         (File.Exists(meta.DataFilePath) ? "Content payload ($R file) is preserved on disk." : "Data payload was purged."),
@@ -220,6 +246,8 @@ public class FileDiscoveryScanner
                                     AlternativeLegitimateExplanations = "Player may have cleaned up old files days or weeks prior.",
                                     WhatIsProven = $"The file '{meta.OriginalFileName}' was deleted to the Recycle Bin on volume {drive.Name.TrimEnd('\\')} at {meta.DeletionTimestamp:yyyy-MM-dd HH:mm:ss} UTC.",
                                     WhatIsNotProven = "Does not prove the cheat was active during the match unless deletion timestamp closely correlates with the match timeframe.",
+                                    Limitations = "Presence in Recycle Bin confirms deletion of the file on disk. Does not establish runtime injection into Minecraft without active process or session memory evidence.",
+                                    RecommendedReview = "Review Prefetch and BAM execution records to check if execution occurred prior to deletion.",
                                     EvidenceStrengtheningFinding = "Prefetch or BAM execution timestamp shortly before deletion.",
                                     EvidenceWeakeningFinding = "Deletion occurred well before the match session."
                                 });

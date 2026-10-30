@@ -141,17 +141,26 @@ public class ServiceAndDriverScanner
                             {
                                 RuleId = "DRV-SUSP-USERDIR-SERVICE",
                                 DetectionName = $"Unsigned / Untrusted Service or Driver in User Directory: {subKeyName}",
+                                FindingTitle = $"Unsigned / Untrusted Service or Driver in User Directory: {subKeyName}",
                                 Category = FindingCategory.ProcessInjection,
+                                EvidenceCategory = EvidenceCategory.RunningProcess,
                                 Classification = FindingClassification.Suspicious,
-                                Severity = Severity.High,
+                                Severity = Severity.Medium,
+                                EvidenceStrength = EvidenceStrength.Moderate,
                                 Confidence = ConfidenceLevel.High,
+                                DetectionMethod = DetectionMethod.MetadataRule,
                                 EvidenceSource = "Registry:Services",
                                 FilePath = cleanPath,
+                                IsInScanWindow = false,
+                                EvidenceClusterId = "CLUSTER-SVC-" + subKeyName.ToLowerInvariant(),
+                                Interpretation = $"Service '{subKeyName}' is registered pointing to file '{cleanPath}' without trusted signature.",
                                 TechnicalExplanation = $"Service '{subKeyName}' (Type {serviceType}) has ImagePath pointing to user directory: '{cleanPath}'. Digital signature verification: {record.TrustStatusExplanation ?? "Unsigned"}.",
                                 WhyItMatters = "Vulnerable driver exploitation (BYOVD) and custom ghost client kernel loaders often register temporary services from %TEMP% or user folders.",
                                 AlternativeLegitimateExplanations = "Custom development tools, peripheral drivers, or gaming software installed to non-standard paths.",
                                 WhatIsProven = $"Service '{subKeyName}' is registered in HKLM Services pointing to a file in a user-writable directory.",
                                 WhatIsNotProven = "Does not prove the service or driver interacts with Minecraft or modifies memory without runtime driver telemetry.",
+                                Limitations = "Service registry configuration. Does not establish active memory interaction with javaw.exe.",
+                                RecommendedReview = "Examine binary exports and driver certificate.",
                                 EvidenceStrengtheningFinding = "Service ImagePath matches a known vulnerable driver hash (e.g. gdrv.sys, mhyprot2.sys, kprocesshacker.sys).",
                                 EvidenceWeakeningFinding = "Service belongs to an established software vendor and is signed with a valid certificate."
                             });
@@ -205,18 +214,27 @@ public class ServiceAndDriverScanner
                         {
                             RuleId = "EVENT-7045-SERVICE-INSTALLED",
                             DetectionName = $"Service Installed from User Path (Event ID 7045): {serviceName}",
+                            FindingTitle = $"Service Installed from User Path (Event ID 7045): {serviceName}",
                             Category = FindingCategory.ProcessInjection,
+                            EvidenceCategory = EvidenceCategory.Historical,
                             Classification = FindingClassification.Suspicious,
                             Severity = Severity.Medium,
+                            EvidenceStrength = EvidenceStrength.Moderate,
                             Confidence = ConfidenceLevel.High,
+                            DetectionMethod = DetectionMethod.HistoricalArtifact,
                             EvidenceSource = "System Event Log (ID 7045)",
                             FilePath = imagePath,
                             ObservedTimestamp = entry.InstalledTimestamp,
+                            IsInScanWindow = false,
+                            EvidenceClusterId = "CLUSTER-EVENT7045-" + serviceName.ToLowerInvariant(),
+                            Interpretation = $"Windows Event Log recorded service installation for '{serviceName}' from user directory '{imagePath}'.",
                             TechnicalExplanation = $"Event ID 7045 indicates a new service or driver '{serviceName}' was installed pointing to user directory: '{imagePath}' at {entry.InstalledTimestamp}.",
                             WhyItMatters = "Transient services installed immediately prior to a match indicate possible kernel cheat loading.",
                             AlternativeLegitimateExplanations = "Software installation or updater running from temporary extract directory.",
                             WhatIsProven = "Service installation event was logged in Windows System Event Log.",
-                            WhatIsNotProven = "Does not prove active execution during match without process lifetime correlation."
+                            WhatIsNotProven = "Does not prove active execution during match without process lifetime correlation.",
+                            Limitations = "Historical event log entry. Does not establish active cheat usage during game match.",
+                            RecommendedReview = "Review event timestamp against player match timeline."
                         });
                     }
                 }

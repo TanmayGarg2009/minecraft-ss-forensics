@@ -183,18 +183,40 @@ public static class CheatDetectionDatabase
     };
 
     /// <summary>
-    /// Match an archive filename against known cheat names.
+    /// Match an archive or executable filename against known cheat signatures with strict word boundary handling.
     /// </summary>
     public static CheatSignature? MatchFileName(string fileName)
     {
         if (string.IsNullOrWhiteSpace(fileName)) return null;
         string clean = Path.GetFileName(fileName).ToLowerInvariant();
+        string nameWithoutExt = Path.GetFileNameWithoutExtension(clean);
 
         foreach (var sig in Signatures)
         {
-            if (sig.KnownFileNames.Any(k => clean.Equals(k, StringComparison.OrdinalIgnoreCase) || clean.Contains(k.Replace(".jar", "").Replace(".exe", ""))))
+            foreach (var k in sig.KnownFileNames)
             {
-                return sig;
+                if (clean.Equals(k, StringComparison.OrdinalIgnoreCase))
+                    return sig;
+
+                if (k.Contains('*'))
+                {
+                    // Pattern matching like jnativehook*.dll
+                    string pattern = "^" + Regex.Escape(k).Replace("\\*", ".*") + "$";
+                    if (Regex.IsMatch(clean, pattern, RegexOptions.IgnoreCase))
+                        return sig;
+                }
+
+                string kStem = Path.GetFileNameWithoutExtension(k).ToLowerInvariant();
+                if (nameWithoutExt.Equals(kStem, StringComparison.OrdinalIgnoreCase))
+                    return sig;
+
+                if (nameWithoutExt.StartsWith(kStem + "-", StringComparison.OrdinalIgnoreCase) ||
+                    nameWithoutExt.StartsWith(kStem + "_", StringComparison.OrdinalIgnoreCase) ||
+                    nameWithoutExt.StartsWith(kStem + "client", StringComparison.OrdinalIgnoreCase) ||
+                    nameWithoutExt.StartsWith(kStem + "v", StringComparison.OrdinalIgnoreCase))
+                {
+                    return sig;
+                }
             }
         }
         return null;

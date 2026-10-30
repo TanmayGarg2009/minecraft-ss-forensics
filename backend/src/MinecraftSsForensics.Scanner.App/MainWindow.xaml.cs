@@ -159,36 +159,44 @@ public partial class MainWindow : Window
         PanelPlayerResults.Visibility = Visibility.Visible;
 
         // Verdict Card Styling
-        if (report.SummaryCounts.ConfirmedCheats > 0)
+        if (report.Verdict.OverallAssessment == InvestigationVerdict.StrongEvidenceMinecraft)
         {
             CardVerdict.Background = new SolidColorBrush(Color.FromRgb(0x7F, 0x1D, 0x1D));
-            LblVerdictTitle.Text = "❌ CONFIRMED CHEAT ARTIFACTS DETECTED";
+            LblVerdictTitle.Text = "❌ " + report.Verdict.OverallAssessment;
             LblVerdictTitle.Foreground = new SolidColorBrush(Color.FromRgb(0xFC, 0xA5, 0xA5));
-            LblVerdictDesc.Text = $"{report.SummaryCounts.ConfirmedCheats} cheat artifact(s) discovered on system.";
-            LblVerdictDesc.Foreground = new SolidColorBrush(Color.FromRgb(0xFE, 0xE2, 0xE2));
+            LblVerdictDesc.Text = report.Verdict.Recommendation;
+            LblVerdictDesc.Foreground = new SolidColorBrush(Color.FromRgb(0xFE, 0xCA, 0xCA));
         }
-        else if (report.SummaryCounts.StrongIndicators > 0)
+        else if (report.Verdict.OverallAssessment == InvestigationVerdict.SuspiciousRuntimeReview)
         {
             CardVerdict.Background = new SolidColorBrush(Color.FromRgb(0x78, 0x35, 0x0F));
-            LblVerdictTitle.Text = "⚠️ STRONG SUSPICIOUS INDICATORS IDENTIFIED";
+            LblVerdictTitle.Text = "⚠️ " + report.Verdict.OverallAssessment;
             LblVerdictTitle.Foreground = new SolidColorBrush(Color.FromRgb(0xFC, 0xD3, 0x4D));
-            LblVerdictDesc.Text = "Execution traces matching known cheat utilities identified.";
+            LblVerdictDesc.Text = report.Verdict.Recommendation;
             LblVerdictDesc.Foreground = new SolidColorBrush(Color.FromRgb(0xFE, 0xF3, 0xC7));
         }
-        else if (report.SummaryCounts.ProhibitedMods > 0)
+        else if (report.Verdict.OverallAssessment == InvestigationVerdict.ProhibitedArtifactNotActive)
         {
-            CardVerdict.Background = new SolidColorBrush(Color.FromRgb(0x78, 0x35, 0x0F));
-            LblVerdictTitle.Text = "⚠️ SERVER POLICY VIOLATIONS (PROHIBITED MODS)";
-            LblVerdictTitle.Foreground = new SolidColorBrush(Color.FromRgb(0xFC, 0xD3, 0x4D));
-            LblVerdictDesc.Text = $"Discovered {report.SummaryCounts.ProhibitedMods} prohibited mod(s) under {report.PolicyEvaluation.AppliedGamemode} ruleset.";
-            LblVerdictDesc.Foreground = new SolidColorBrush(Color.FromRgb(0xFE, 0xF3, 0xC7));
+            CardVerdict.Background = new SolidColorBrush(Color.FromRgb(0x43, 0x14, 0x07));
+            LblVerdictTitle.Text = "⚠️ " + report.Verdict.OverallAssessment;
+            LblVerdictTitle.Foreground = new SolidColorBrush(Color.FromRgb(0xFB, 0x92, 0x3C));
+            LblVerdictDesc.Text = report.Verdict.Recommendation;
+            LblVerdictDesc.Foreground = new SolidColorBrush(Color.FromRgb(0xFF, 0xED, 0xD5));
+        }
+        else if (report.Verdict.OverallAssessment == InvestigationVerdict.InconclusiveTelemetry)
+        {
+            CardVerdict.Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x29, 0x3B));
+            LblVerdictTitle.Text = "ℹ️ " + report.Verdict.OverallAssessment;
+            LblVerdictTitle.Foreground = new SolidColorBrush(Color.FromRgb(0x94, 0xA3, 0xB8));
+            LblVerdictDesc.Text = report.Verdict.Recommendation;
+            LblVerdictDesc.Foreground = new SolidColorBrush(Color.FromRgb(0xCB, 0xD5, 0xE1));
         }
         else
         {
             CardVerdict.Background = new SolidColorBrush(Color.FromRgb(0x06, 0x4E, 0x3B));
-            LblVerdictTitle.Text = "✔ NO EVIDENCE OF CHEATING DETECTED";
+            LblVerdictTitle.Text = "✔ " + report.Verdict.OverallAssessment;
             LblVerdictTitle.Foreground = new SolidColorBrush(Color.FromRgb(0x6E, 0xE7, 0xB7));
-            LblVerdictDesc.Text = "No confirmed cheat software or prohibited mod artifacts discovered.";
+            LblVerdictDesc.Text = report.Verdict.Recommendation;
             LblVerdictDesc.Foreground = new SolidColorBrush(Color.FromRgb(0xA7, 0xF3, 0xD0));
         }
 
@@ -206,7 +214,7 @@ public partial class MainWindow : Window
         {
             foreach (var f in report.Findings)
             {
-                LstPlayerFindings.Items.Add($"[{f.Classification.ToString().ToUpperInvariant()}] {f.DetectionName}");
+                LstPlayerFindings.Items.Add($"[{f.Severity}] [{f.EvidenceCategory}] {f.Finding}");
             }
         }
 

@@ -80,16 +80,25 @@ public class UsbHistoryScanner
                 {
                     RuleId = "INFO-USBSTOR-DEVICES",
                     DetectionName = $"USB Storage Devices Identified ({devices.Count} found)",
+                    FindingTitle = $"USB Storage Devices Identified ({devices.Count} found)",
                     Category = FindingCategory.UsbArtifact,
+                    EvidenceCategory = EvidenceCategory.Historical,
                     Classification = FindingClassification.Informational,
                     Severity = Severity.Informational,
+                    EvidenceStrength = EvidenceStrength.Strong,
                     Confidence = ConfidenceLevel.Certain,
+                    DetectionMethod = DetectionMethod.HistoricalArtifact,
                     EvidenceSource = "Registry (USBSTOR) & SetupAPI",
+                    IsInScanWindow = false,
+                    EvidenceClusterId = "CLUSTER-USB-HISTORY",
+                    Interpretation = $"Enumerated {devices.Count} historically connected USB storage device(s) via Windows USBSTOR registry and SetupAPI logs.",
                     TechnicalExplanation = $"Enumerated {devices.Count} historically connected USB storage device(s) via Windows USBSTOR registry and SetupAPI logs.",
                     WhyItMatters = "In competitive screensharing, flash drives may be used to execute cheat programs without leaving permanent files on the main drive.",
                     AlternativeLegitimateExplanations = "Standard personal USB flash drives, backup drives, or external storage peripherals.",
                     WhatIsProven = "The enumerated USB storage devices were physically connected to this computer.",
-                    WhatIsNotProven = "Does not prove a cheat was executed from the USB device without correlated Prefetch, BAM, or USN journal entries."
+                    WhatIsNotProven = "Does not prove a cheat was executed from the USB device without correlated Prefetch, BAM, or USN journal entries.",
+                    Limitations = "Historical hardware connection records only. Does not prove software execution from USB.",
+                    RecommendedReview = "Check drive letters and Prefetch records for executables launched from removable media."
                 });
             }
         }

@@ -84,23 +84,35 @@ public class RegistryScanner
 
                             if (isCheatMatch)
                             {
+                                string clusterId = "CLUSTER-" + sig!.Name.ToLowerInvariant().Replace(" ", "-");
                                 findings.Add(new FindingRecord
                                 {
                                     RuleId = "REG-USERASSIST-CHEAT",
-                                    DetectionName = $"UserAssist Execution Record: {sig!.Name}",
+                                    DetectionName = $"UserAssist Execution Record: {sig.Name}",
+                                    FindingTitle = $"UserAssist Execution Record: {sig.Name}",
                                     Category = FindingCategory.RegistryArtifact,
+                                    EvidenceCategory = EvidenceCategory.Historical,
                                     Classification = FindingClassification.StrongIndicator,
-                                    Severity = Severity.High,
+                                    Severity = Severity.Medium,
+                                    EvidenceStrength = EvidenceStrength.Strong,
                                     Confidence = ConfidenceLevel.High,
+                                    DetectionMethod = DetectionMethod.HistoricalArtifact,
+                                    SoftwareState = SoftwareEvidenceState.SoftwareExecuted,
+                                    SoftwareStateDescription = $"GUI execution artifact recorded in UserAssist (Run count: {runCount}).",
                                     EvidenceSource = "Registry (UserAssist)",
                                     FilePath = decodedName,
                                     ObservedTimestamp = lastExecution,
+                                    IsInScanWindow = false,
+                                    EvidenceClusterId = clusterId,
+                                    Interpretation = $"Decoded UserAssist ROT13 registry entry '{decodedName}' proves GUI launch of '{sig.Name}'. Run Count: {runCount}." + (lastExecution.HasValue ? $" Last Executed: {lastExecution:yyyy-MM-dd HH:mm:ss} UTC." : ""),
                                     TechnicalExplanation = $"Decoded UserAssist ROT13 registry entry '{decodedName}' matches known cheat identifier '{sig.Name}'. " +
                                         $"Recorded Run Count: {runCount}. " + (lastExecution.HasValue ? $"Last Executed: {lastExecution:yyyy-MM-dd HH:mm:ss} UTC." : ""),
                                     WhyItMatters = "Proves this executable was launched on this Windows user account via the graphical desktop interface.",
                                     AlternativeLegitimateExplanations = "Does not prove execution during the competitive Minecraft match session unless correlated with session timestamps.",
                                     WhatIsProven = "The application was executed via Windows Explorer interface on this machine.",
                                     WhatIsNotProven = "Does not prove the cheat was active during the specific Minecraft match under investigation.",
+                                    Limitations = "Historical execution record. Proves past launch on Windows; does not prove current session execution.",
+                                    RecommendedReview = "Cross-reference execution timestamp with server match logs and game process start time.",
                                     EvidenceStrengtheningFinding = "Prefetch (.pf) or BAM entry with timestamp matching Minecraft gameplay.",
                                     EvidenceWeakeningFinding = "File creation/execution timestamp is months old with zero recent activity."
                                 });
@@ -147,19 +159,31 @@ public class RegistryScanner
 
                         if (sig != null)
                         {
+                            string clusterId = "CLUSTER-" + sig.Name.ToLowerInvariant().Replace(" ", "-");
                             findings.Add(new FindingRecord
                             {
                                 RuleId = "REG-PCA-CHEAT",
                                 DetectionName = $"Program Compatibility Record: {sig.Name}",
+                                FindingTitle = $"Program Compatibility Record: {sig.Name}",
                                 Category = FindingCategory.RegistryArtifact,
+                                EvidenceCategory = EvidenceCategory.Historical,
                                 Classification = FindingClassification.StrongIndicator,
-                                Severity = Severity.High,
+                                Severity = Severity.Medium,
+                                EvidenceStrength = EvidenceStrength.Strong,
                                 Confidence = ConfidenceLevel.High,
+                                DetectionMethod = DetectionMethod.HistoricalArtifact,
+                                SoftwareState = SoftwareEvidenceState.SoftwareExecuted,
+                                SoftwareStateDescription = "Recorded in Program Compatibility Assistant execution hive.",
                                 EvidenceSource = "Registry (PcaSvc)",
                                 FilePath = valName,
+                                IsInScanWindow = false,
+                                EvidenceClusterId = clusterId,
+                                Interpretation = $"Program Compatibility Assistant recorded historical execution of known cheat '{sig.Name}' at '{valName}'.",
                                 TechnicalExplanation = $"Program Compatibility Assistant recorded execution of known cheat '{sig.Name}' at '{valName}'.",
                                 WhyItMatters = "PCA persists execution tracking even if files are deleted or moved.",
-                                AlternativeLegitimateExplanations = "Historical artifact prior to server registration."
+                                AlternativeLegitimateExplanations = "Historical artifact prior to server registration.",
+                                Limitations = "PCA proves historical execution on the operating system. Does not prove execution in the active session.",
+                                RecommendedReview = "Cross-reference with BAM/DAM and Prefetch timestamps."
                             });
                         }
                     }

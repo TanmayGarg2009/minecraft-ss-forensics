@@ -5,6 +5,7 @@ using System.IO;
 using System.Management;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.RegularExpressions;
+using MinecraftSsForensics.Scanner.Cheats;
 using MinecraftSsForensics.Scanner.Hashing;
 
 namespace MinecraftSsForensics.Scanner.Process;
@@ -28,6 +29,10 @@ public class ProcessScanner : IProcessScanner
         @"^(?:jna\d+|jnidispatch|lwjgl[a-z0-9_]*|openal(?:32|64)?|glfw[0-9]*|jemalloc|tinyfd|jinput-[a-z0-9_\-]+)\.dll$",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    private static readonly Regex JavaAgentRegex = new(
+        @"-javaagent:(?:""([^""]+)""|(\S+))",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     public ProcessScanner(IFileHasher? hasher = null)
     {
         _hasher = hasher ?? new StreamingFileHasher();
@@ -45,7 +50,10 @@ public class ProcessScanner : IProcessScanner
             try
             {
                 string procName = proc.ProcessName.ToLowerInvariant();
-                if (!TargetProcessNames.Contains(procName))
+                bool isTarget = TargetProcessNames.Contains(procName);
+                var cheatSig = !isTarget ? (CheatDetectionDatabase.MatchFileName(procName + ".exe") ?? CheatDetectionDatabase.MatchFileName(procName)) : null;
+
+                if (!isTarget && cheatSig == null)
                 {
                     continue;
                 }
@@ -55,7 +63,9 @@ public class ProcessScanner : IProcessScanner
                     ProcessId = proc.Id,
                     ProcessName = proc.ProcessName,
                     IsGameProcess = procName.Equals("javaw") || procName.Equals("java"),
-                    IsLauncherProcess = !procName.Equals("javaw") && !procName.Equals("java")
+                    IsLauncherProcess = !procName.Equals("javaw") && !procName.Equals("java") && isTarget,
+                    IsCheatProcess = cheatSig != null,
+                    MatchedCheatName = cheatSig?.Name
                 };
 
                 try
@@ -77,6 +87,19 @@ public class ProcessScanner : IProcessScanner
                 {
                     try { item.ParentProcessName = System.Diagnostics.Process.GetProcessById(parentId.Value).ProcessName; }
                     catch { /* Parent already exited */ }
+                }
+
+                // Parse Java agents if present in command line
+                if (!string.IsNullOrEmpty(cmdLine))
+                {
+                    foreach (Match m in JavaAgentRegex.Matches(cmdLine))
+                    {
+                        string agentPath = !string.IsNullOrEmpty(m.Groups[1].Value) ? m.Groups[1].Value : m.Groups[2].Value;
+                        if (!string.IsNullOrWhiteSpace(agentPath))
+                        {
+                            item.JavaAgents.Add(agentPath.Trim());
+                        }
+                    }
                 }
 
                 // If game process, extract java version if present

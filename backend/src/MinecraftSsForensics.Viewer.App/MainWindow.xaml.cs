@@ -86,7 +86,7 @@ public partial class MainWindow : Window
         TxtCountMods.Text = report.SummaryCounts.VerifiedMods.ToString();
 
         // 3. Verdict Card
-        if (report.SummaryCounts.ConfirmedCheats > 0)
+        if (report.Verdict.OverallAssessment == InvestigationVerdict.StrongEvidenceMinecraft)
         {
             BorderVerdict.Background = new SolidColorBrush(Color.FromRgb(0x7F, 0x1D, 0x1D));
             BorderVerdict.BorderBrush = new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44));
@@ -94,7 +94,7 @@ public partial class MainWindow : Window
             TxtVerdictTitle.Foreground = new SolidColorBrush(Color.FromRgb(0xFC, 0xA5, 0xA5));
             TxtVerdictDesc.Text = report.Verdict.Recommendation;
         }
-        else if (report.SummaryCounts.StrongIndicators > 0)
+        else if (report.Verdict.OverallAssessment == InvestigationVerdict.SuspiciousRuntimeReview)
         {
             BorderVerdict.Background = new SolidColorBrush(Color.FromRgb(0x78, 0x35, 0x0F));
             BorderVerdict.BorderBrush = new SolidColorBrush(Color.FromRgb(0xF5, 0x9E, 0x0B));
@@ -102,12 +102,20 @@ public partial class MainWindow : Window
             TxtVerdictTitle.Foreground = new SolidColorBrush(Color.FromRgb(0xFC, 0xD3, 0x4D));
             TxtVerdictDesc.Text = report.Verdict.Recommendation;
         }
-        else if (report.SummaryCounts.ProhibitedMods > 0 || report.CorrelatedAssessments.Any(a => a.IsPolicyViolation))
+        else if (report.Verdict.OverallAssessment == InvestigationVerdict.ProhibitedArtifactNotActive)
         {
-            BorderVerdict.Background = new SolidColorBrush(Color.FromRgb(0x78, 0x35, 0x0F));
-            BorderVerdict.BorderBrush = new SolidColorBrush(Color.FromRgb(0xF5, 0x9E, 0x0B));
+            BorderVerdict.Background = new SolidColorBrush(Color.FromRgb(0x43, 0x14, 0x07));
+            BorderVerdict.BorderBrush = new SolidColorBrush(Color.FromRgb(0xFB, 0x92, 0x3C));
             TxtVerdictTitle.Text = "⚠️ " + report.Verdict.OverallAssessment;
-            TxtVerdictTitle.Foreground = new SolidColorBrush(Color.FromRgb(0xFC, 0xD3, 0x4D));
+            TxtVerdictTitle.Foreground = new SolidColorBrush(Color.FromRgb(0xFB, 0x92, 0x3C));
+            TxtVerdictDesc.Text = report.Verdict.Recommendation;
+        }
+        else if (report.Verdict.OverallAssessment == InvestigationVerdict.InconclusiveTelemetry)
+        {
+            BorderVerdict.Background = new SolidColorBrush(Color.FromRgb(0x1E, 0x29, 0x3B));
+            BorderVerdict.BorderBrush = new SolidColorBrush(Color.FromRgb(0x64, 0x74, 0x8B));
+            TxtVerdictTitle.Text = "ℹ️ " + report.Verdict.OverallAssessment;
+            TxtVerdictTitle.Foreground = new SolidColorBrush(Color.FromRgb(0x94, 0xA3, 0xB8));
             TxtVerdictDesc.Text = report.Verdict.Recommendation;
         }
         else
@@ -151,17 +159,17 @@ public partial class MainWindow : Window
     {
         if (LstFindings.SelectedItem is FindingRecord f)
         {
-            TxtDetailTitle.Text = f.DetectionName;
-            TxtDetailMeta.Text = $"Rule ID: {f.RuleId} • Classification: {f.Classification} • Software State: {f.SoftwareState} • Scope: {f.PolicyViolationScope}";
+            TxtDetailTitle.Text = f.Finding;
+            TxtDetailMeta.Text = $"Rule ID: {f.RuleId} • Severity: {f.Severity} • Category: {f.EvidenceCategory} • Method: {f.DetectionMethod} • Strength: {f.EvidenceStrength} • Confidence: {f.Confidence}";
             TxtDetailExplanation.Text = f.TechnicalExplanation;
-            TxtDetailPath.Text = $"Path: {f.FilePath ?? "N/A"}";
+            TxtDetailPath.Text = $"Path (Redacted): {f.GetRedactedPath()}";
             TxtDetailHash.Text = $"SHA-256: {f.FileSha256 ?? "N/A"}";
 
-            TxtDetailProven.Text = string.IsNullOrWhiteSpace(f.WhatIsProven) ? "Artifact presence or behavior documented above." : f.WhatIsProven;
-            TxtDetailNotProven.Text = string.IsNullOrWhiteSpace(f.WhatIsNotProven) ? "Does not prove in-game advantage without corroborating match session evidence." : f.WhatIsNotProven;
+            TxtDetailProven.Text = !string.IsNullOrWhiteSpace(f.Interpretation) ? f.Interpretation : (!string.IsNullOrWhiteSpace(f.WhatIsProven) ? f.WhatIsProven : "Artifact presence or behavior documented above.");
+            TxtDetailNotProven.Text = !string.IsNullOrWhiteSpace(f.Limitations) ? f.Limitations : (!string.IsNullOrWhiteSpace(f.WhatIsNotProven) ? f.WhatIsNotProven : "Does not prove in-game advantage without corroborating match session evidence.");
             TxtDetailWhyMatters.Text = string.IsNullOrWhiteSpace(f.WhyItMatters) ? "Forensic indicator of modified game files or prohibited software." : f.WhyItMatters;
             TxtDetailAlternative.Text = string.IsNullOrWhiteSpace(f.AlternativeLegitimateExplanations) ? "Unrelated utility, development build, or joke file." : f.AlternativeLegitimateExplanations;
-            TxtDetailLimitations.Text = string.IsNullOrWhiteSpace(f.Limitations) ? "Standard user-mode inspection scope." : f.Limitations;
+            TxtDetailLimitations.Text = string.IsNullOrWhiteSpace(f.RecommendedReview) ? "Standard human staff verification." : $"Recommended Review: {f.RecommendedReview}";
         }
     }
 

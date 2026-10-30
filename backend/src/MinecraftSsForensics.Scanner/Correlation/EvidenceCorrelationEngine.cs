@@ -27,17 +27,16 @@ public class CorrelatedSoftwareAssessment
 
 /// <summary>
 /// Correlates evidence across filesystem, process memory, execution history, and registry hives.
-/// Strictly distinguishes the 8 evidentiary correlation states:
-/// 1. Software is present
-/// 2. Software is installed
-/// 3. Software was executed
-/// 4. Software was active during a Minecraft session
-/// 5. Software interacted with Minecraft
-/// 6. Software contains prohibited capabilities
-/// 7. Prohibited functionality was used
-/// 8. Applicable server policy prohibits its possession, execution, or use
+/// Strictly distinguishes the 6 evidentiary correlation states:
+/// 1. Software is present (Disk)
+/// 2. Software is running (RunningProcess)
+/// 3. Software module loaded in virtual memory (LoadedModule)
+/// 4. Direct technical interaction or injection with Minecraft (Injected)
+/// 5. Active during scan window or match session (ActiveInScanWindow)
+/// 6. Historical execution prior to scan window (Historical)
 /// 
 /// Strictly never treats a running Java process as proof that every discovered mod was loaded.
+/// Never conflates presence on disk with active in-game cheating.
 /// </summary>
 public class EvidenceCorrelationEngine
 {
@@ -79,7 +78,6 @@ public class EvidenceCorrelationEngine
                 StateDescription = $"Mod archive installed in Minecraft profile mods folder: '{mod.FileName}'."
             };
 
-            // Create structured Evidence item
             string evId = $"EVD-MOD-{Guid.NewGuid():N}"[..12];
             report.EvidenceItems.Add(new EvidenceReferenceItem
             {
@@ -148,14 +146,14 @@ public class EvidenceCorrelationEngine
             else if (mod.HasConflictingSignals)
             {
                 assessment.State = SoftwareEvidenceState.SoftwareContainsProhibitedCapabilities;
-                assessment.StateDescription = $"Mod contains verified suspicious or automated bytecode capabilities; no execution records found.";
+                assessment.StateDescription = "Mod contains verified suspicious or automated bytecode capabilities; no execution records found.";
                 assessment.WhatIsProven = "Mod binary contains automated/restricted structural capabilities.";
                 assessment.WhatIsNotProven = "Execution was not detected.";
             }
             else
             {
                 assessment.State = SoftwareEvidenceState.SoftwareInstalled;
-                assessment.StateDescription = $"Mod is installed on disk; no active session loading or execution telemetry was found.";
+                assessment.StateDescription = "Mod is installed on disk; no active session loading or execution telemetry was found.";
                 assessment.WhatIsProven = "File exists on disk in a Minecraft mods folder.";
                 assessment.WhatIsNotProven = "No proof of execution or active in-game use.";
             }
@@ -166,7 +164,6 @@ public class EvidenceCorrelationEngine
 
             if (parsedPolicy == GameplayPolicy.PROHIBITED_POSSESSION)
             {
-                // Possession prohibition: possession/installation alone is a violation
                 assessment.IsPolicyViolation = true;
                 assessment.PolicyEvaluationExplanation = $"VIOLATION (POSSESSION BANNED): Server policy for {policy.Gamemode} bans possession or installation of '{mod.Name}'.";
                 assessment.WhatIsProven = "Artifact is installed in the active Minecraft mods directory.";
@@ -175,7 +172,6 @@ public class EvidenceCorrelationEngine
             }
             else if (parsedPolicy == GameplayPolicy.PROHIBITED_EXECUTION)
             {
-                // Execution prohibition: ONLY violates if actively executed or loaded into session
                 bool executed = (assessment.State == SoftwareEvidenceState.SoftwareActiveDuringSession ||
                                  assessment.State == SoftwareEvidenceState.SoftwareExecuted ||
                                  assessment.State == SoftwareEvidenceState.SoftwareInteractingWithMinecraft);
@@ -188,7 +184,7 @@ public class EvidenceCorrelationEngine
             }
             else if (parsedPolicy == GameplayPolicy.PROHIBITED_GAMEPLAY_USE)
             {
-                assessment.IsPolicyViolation = false; // Requires packet or in-game telemetry
+                assessment.IsPolicyViolation = false;
                 assessment.PolicyEvaluationExplanation = $"RESTRICTED/NEEDS REVIEW: '{mod.Name}' is prohibited on active gameplay use. Installation is verified, but in-game activation requires staff session review.";
                 assessment.AlternativeLegitimateExplanations = "Mod may be installed for cosmetic or non-combat purposes allowed outside competitive matches.";
             }
@@ -211,7 +207,7 @@ public class EvidenceCorrelationEngine
             assessments.Add(assessment);
         }
 
-        // 2. Correlate File Discoveries in Downloads/Desktop/Recycle Bin (Present)
+        // 2. Correlate File Discoveries in Downloads/Desktop/Recycle Bin (Disk only)
         foreach (var file in report.FileDiscoveries)
         {
             var cheatMatch = CheatDetectionDatabase.MatchFileName(file.FileName);
@@ -313,6 +309,76 @@ public class EvidenceCorrelationEngine
                 assessment.SupportingEvidenceIds.Add(evId);
 
                 assessments.Add(assessment);
+            }
+        }
+
+        // 4. Correlate Running Processes
+        foreach (var proc in report.RunningProcesses)
+        {
+            var cheatMatch = CheatDetectionDatabase.MatchFileName(proc.ProcessName + ".exe") ??
+                             CheatDetectionDatabase.MatchFileName(proc.ProcessName);
+
+            if (cheatMatch != null)
+            {
+                bool isMinecraftActive = activeGameProcesses.Count > 0;
+                var assessment = new CorrelatedSoftwareAssessment
+                {
+                    SoftwareName = cheatMatch.Name,
+                    FilePath = proc.ExecutablePath,
+                    State = isMinecraftActive ? SoftwareEvidenceState.SoftwareActiveDuringSession : SoftwareEvidenceState.SoftwareExecuted,
+                    StateDescription = isMinecraftActive
+                        ? $"Cheat executable '{cheatMatch.Name}' (PID {proc.ProcessId}) running concurrently with active Minecraft session."
+                        : $"Cheat executable '{cheatMatch.Name}' (PID {proc.ProcessId}) is currently executing; Minecraft is not running.",
+                    Confidence = ConfidenceLevel.Certain,
+                    WhatIsProven = $"Process '{proc.ProcessName}' (PID {proc.ProcessId}) is actively running on the operating system.",
+                    WhatIsNotProven = isMinecraftActive
+                        ? "Concurrent execution indicates cheat was active during session; does not prove injection without memory hooks."
+                        : "Minecraft was not running; cheat did not interact with an active Minecraft session.",
+                    AlternativeLegitimateExplanations = "Process left running from previous activity or testing outside Minecraft."
+                };
+
+                assessments.Add(assessment);
+
+                string clusterId = "CLUSTER-" + cheatMatch.Name.ToLowerInvariant().Replace(" ", "-");
+                var existingFinding = report.Findings.FirstOrDefault(f => f.DetectionName.Contains(cheatMatch.Name, StringComparison.OrdinalIgnoreCase));
+                if (existingFinding != null)
+                {
+                    existingFinding.EvidenceCategory = isMinecraftActive ? EvidenceCategory.ActiveInScanWindow : EvidenceCategory.RunningProcess;
+                    existingFinding.SoftwareState = isMinecraftActive ? SoftwareEvidenceState.SoftwareActiveDuringSession : SoftwareEvidenceState.SoftwareExecuted;
+                    existingFinding.Severity = isMinecraftActive ? Severity.High : Severity.Medium;
+                    existingFinding.IsInScanWindow = isMinecraftActive;
+                    existingFinding.TargetProcessId = proc.ProcessId;
+                    existingFinding.TargetProcessName = proc.ProcessName;
+                    existingFinding.EvidenceClusterId = clusterId;
+                }
+                else
+                {
+                    report.Findings.Add(new FindingRecord
+                    {
+                        RuleId = "PROC-CHEAT-PROCESS-RUNNING",
+                        DetectionName = $"Known Cheat Process Executing: {cheatMatch.Name}",
+                        FindingTitle = $"Known Cheat Process Executing: {cheatMatch.Name}",
+                        Category = FindingCategory.CheatArtifact,
+                        EvidenceCategory = isMinecraftActive ? EvidenceCategory.ActiveInScanWindow : EvidenceCategory.RunningProcess,
+                        Classification = FindingClassification.ConfirmedCheatArtifact,
+                        Severity = isMinecraftActive ? Severity.High : Severity.Medium,
+                        EvidenceStrength = EvidenceStrength.Strong,
+                        Confidence = ConfidenceLevel.Certain,
+                        DetectionMethod = DetectionMethod.ExactSignature,
+                        SoftwareState = isMinecraftActive ? SoftwareEvidenceState.SoftwareActiveDuringSession : SoftwareEvidenceState.SoftwareExecuted,
+                        SoftwareStateDescription = assessment.StateDescription,
+                        EvidenceSource = "ProcessMonitor",
+                        FilePath = proc.ExecutablePath,
+                        TargetProcessId = proc.ProcessId,
+                        TargetProcessName = proc.ProcessName,
+                        ObservedTimestamp = proc.StartTime ?? DateTimeOffset.UtcNow,
+                        IsInScanWindow = isMinecraftActive,
+                        EvidenceClusterId = clusterId,
+                        Interpretation = assessment.WhatIsProven,
+                        Limitations = assessment.WhatIsNotProven,
+                        RecommendedReview = "Check process memory, network connections, and injected modules."
+                    });
+                }
             }
         }
 

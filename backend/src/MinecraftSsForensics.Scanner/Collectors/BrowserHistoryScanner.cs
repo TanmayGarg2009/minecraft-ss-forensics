@@ -200,18 +200,27 @@ public class BrowserHistoryScanner
                 {
                     RuleId = "BROWSER-CHEAT-SITE-VISIT",
                     DetectionName = $"Browser History Match: {matchedDomain}",
+                    FindingTitle = $"Browser History Match: {matchedDomain}",
                     Category = FindingCategory.BrowserHistory,
+                    EvidenceCategory = EvidenceCategory.Historical,
                     Classification = FindingClassification.Suspicious,
-                    Severity = Severity.Medium,
+                    Severity = Severity.Low,
+                    EvidenceStrength = EvidenceStrength.Moderate,
                     Confidence = authenticVisitTime.HasValue ? ConfidenceLevel.High : ConfidenceLevel.Medium,
+                    DetectionMethod = DetectionMethod.HistoricalArtifact,
                     EvidenceSource = $"Browser History ({browserName})",
                     ObservedTimestamp = authenticVisitTime,
+                    IsInScanWindow = false,
+                    EvidenceClusterId = "CLUSTER-WEB-" + matchedDomain.ToLowerInvariant(),
+                    Interpretation = $"Discovered visit to known cheat domain '{matchedDomain}' in {browserName} history database." + (authenticVisitTime.HasValue ? $" Recorded visit time: {authenticVisitTime:yyyy-MM-dd HH:mm:ss} UTC." : ""),
                     TechnicalExplanation = $"Discovered visit to known cheat domain '{matchedDomain}' in {browserName} history database. " +
                         (authenticVisitTime.HasValue ? $"Authentic recorded visit time: {authenticVisitTime:yyyy-MM-dd HH:mm:ss} UTC." : "Timestamp unrecorded."),
                     WhyItMatters = "Indicates that the player navigated to or researched known cheat client websites.",
                     AlternativeLegitimateExplanations = "Player may have followed a link from a news article, YouTube video, or forum discussion without downloading cheat software.",
                     WhatIsProven = $"A URL containing '{matchedDomain}' was visited in {browserName} on this user profile.",
                     WhatIsNotProven = "Does not prove that cheat software was downloaded, executed, or active during a Minecraft session.",
+                    Limitations = "Web navigation record. Does not prove software download or execution.",
+                    RecommendedReview = "Check Downloads folder and execution history for software downloaded around this timestamp.",
                     EvidenceStrengtheningFinding = "Discovered cheat executable in Downloads/Desktop or Prefetch/BAM execution record.",
                     EvidenceWeakeningFinding = "No executable, JAR, or memory artifacts matching the cheat were found on the machine."
                 });
