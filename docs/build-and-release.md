@@ -15,7 +15,7 @@ This document describes how to compile, test, package, and publish the Minecraft
 ## 2. Repository Layout
 
 ```
-ssing tool/
+minecraft-ss-forensics/
 ├── backend/
 │   ├── MinecraftSsForensics.sln             # Master standalone solution
 │   ├── src/
@@ -23,7 +23,7 @@ ssing tool/
 │   │   ├── MinecraftSsForensics.Scanner.App/ # Player scan WPF GUI
 │   │   └── MinecraftSsForensics.Viewer.App/  # Dedicated Staff Report Viewer WPF GUI
 │   └── tests/
-│       └── MinecraftSsForensics.Scanner.Tests/ # 56 automated verification tests
+│       └── MinecraftSsForensics.Scanner.Tests/ # 79 automated verification tests
 ├── docs/                                     # Guides and architectural specs
 ├── launch.ps1                                # Verified PowerShell launcher script
 ├── run-scanner.bat                           # Local development scanner launcher

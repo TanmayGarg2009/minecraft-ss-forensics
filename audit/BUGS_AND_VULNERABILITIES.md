@@ -1,4 +1,4 @@
-# Bugs and Vulnerabilities Inventory — Minecraft Forensic Scanner
+﻿# Bugs and Vulnerabilities Inventory â€” Minecraft Forensic Scanner
 
 **Date of Audit:** October 30, 2026  
 **Repository:** Minecraft Screenshare (SS) Forensics / Standalone Windows Scanner  
@@ -25,7 +25,7 @@
 ### [BUG-P0-01] Cryptographic Report Seal Excludes Evidence Payloads
 - **Severity:** P0 (Critical Security)
 - **Category:** Cryptographic Verification / Tamper Protection
-- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Engine/ReportIntegrityValidator.cs:33-47`](file:///c:/Users/TANMAY%20GARG/Desktop/ssing%20tool/backend/src/MinecraftSsForensics.Scanner/Engine/ReportIntegrityValidator.cs#L33-L47)
+- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Engine/ReportIntegrityValidator.cs:33-47`](backend/src/MinecraftSsForensics.Scanner/Engine/ReportIntegrityValidator.cs#L33-L47)
 - **Description & Root Cause:**
   `ComputeReportSeal` claims to compute a cryptographic SHA-256 seal guaranteeing the integrity of the scan report. However, the string hashed by the algorithm only contains scalar metadata:
   ```csharp
@@ -66,8 +66,8 @@
 - **Severity:** P0 (Critical Security)
 - **Category:** Code Signing / Driver & DLL Integrity
 - **Location:**
-  - [`backend/src/MinecraftSsForensics.Scanner/Scanners/ProcessScanner.cs:139`](file:///c:/Users/TANMAY%20GARG/Desktop/ssing%20tool/backend/src/MinecraftSsForensics.Scanner/Scanners/ProcessScanner.cs#L139)
-  - [`backend/src/MinecraftSsForensics.Scanner/Scanners/ServiceAndDriverScanner.cs:139`](file:///c:/Users/TANMAY%20GARG/Desktop/ssing%20tool/backend/src/MinecraftSsForensics.Scanner/Scanners/ServiceAndDriverScanner.cs#L139)
+  - [`backend/src/MinecraftSsForensics.Scanner/Scanners/ProcessScanner.cs:139`](backend/src/MinecraftSsForensics.Scanner/Scanners/ProcessScanner.cs#L139)
+  - [`backend/src/MinecraftSsForensics.Scanner/Scanners/ServiceAndDriverScanner.cs:139`](backend/src/MinecraftSsForensics.Scanner/Scanners/ServiceAndDriverScanner.cs#L139)
 - **Description & Root Cause:**
   The scanner attempts to determine if running modules and kernel drivers are legitimately signed using .NET's `X509Certificate.CreateFromSignedFile(path)`:
   ```csharp
@@ -90,7 +90,7 @@
 ### [BUG-P0-03] Browser History Timestamp Fabrication
 - **Severity:** P0 (Critical Forensic Inaccuracy / Ethics)
 - **Category:** Forensic Evidence Collection
-- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Scanners/BrowserHistoryScanner.cs:74-88`](file:///c:/Users/TANMAY%20GARG/Desktop/ssing%20tool/backend/src/MinecraftSsForensics.Scanner/Scanners/BrowserHistoryScanner.cs#L74-L88)
+- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Scanners/BrowserHistoryScanner.cs:74-88`](backend/src/MinecraftSsForensics.Scanner/Scanners/BrowserHistoryScanner.cs#L74-L88)
 - **Description & Root Cause:**
   Chromium browser history (`History` file) is a SQLite 3 database. The scanner attempts to read it without a SQLite driver by copying the file and decoding the raw binary bytes as a UTF-8 string:
   ```csharp
@@ -125,7 +125,7 @@
 ### [BUG-P1-01] False Positive Execution Policy Violations via Game Session Overlap
 - **Severity:** P1 (High Forensic Inaccuracy)
 - **Category:** Policy Engine / Correlation
-- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Engine/EvidenceCorrelationEngine.cs:88-115`](file:///c:/Users/TANMAY%20GARG/Desktop/ssing%20tool/backend/src/MinecraftSsForensics.Scanner/Engine/EvidenceCorrelationEngine.cs#L88-L115)
+- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Engine/EvidenceCorrelationEngine.cs:88-115`](backend/src/MinecraftSsForensics.Scanner/Engine/EvidenceCorrelationEngine.cs#L88-L115)
 - **Description & Root Cause:**
   When evaluating whether a mod was executed under a `PROHIBITED_EXECUTION` rule, the engine checks:
   ```csharp
@@ -145,7 +145,7 @@
 ### [BUG-P1-02] $Recycle.Bin File Name Matching Failure
 - **Severity:** P1 (High Forensic Inaccuracy)
 - **Category:** Deleted Artifact Detection
-- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Scanners/FileDiscoveryScanner.cs:132-140`](file:///c:/Users/TANMAY%20GARG/Desktop/ssing%20tool/backend/src/MinecraftSsForensics.Scanner/Scanners/FileDiscoveryScanner.cs#L132-L140)
+- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Scanners/FileDiscoveryScanner.cs:132-140`](backend/src/MinecraftSsForensics.Scanner/Scanners/FileDiscoveryScanner.cs#L132-L140)
 - **Description & Root Cause:**
   The scanner enumerates files in `C:\$Recycle.Bin` and matches filenames using:
   ```csharp
@@ -162,7 +162,7 @@
 ### [BUG-P1-03] Prefetch Parser Format Incompatibility on Modern Windows
 - **Severity:** P1 (High Forensic Inaccuracy)
 - **Category:** Execution History
-- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Scanners/HistoricalEvidenceScanner.cs:51-70`](file:///c:/Users/TANMAY%20GARG/Desktop/ssing%20tool/backend/src/MinecraftSsForensics.Scanner/Scanners/HistoricalEvidenceScanner.cs#L51-L70)
+- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Scanners/HistoricalEvidenceScanner.cs:51-70`](backend/src/MinecraftSsForensics.Scanner/Scanners/HistoricalEvidenceScanner.cs#L51-L70)
 - **Description & Root Cause:**
   The Prefetch scanner inspects `.pf` files in `C:\Windows\Prefetch`. On Windows 10 and 11, Prefetch files are compressed using the proprietary Microsoft XPRESS Huffman algorithm (starting with the magic bytes `MAM\x04`). The current implementation does not decompress `MAM` headers, instead only reading file metadata (creation/write times) and searching for cheat names in raw filenames (`file.Name`).
 - **Exploitation / Failure Mode:**
@@ -175,7 +175,7 @@
 ### [BUG-P1-04] BAM/DAM Registry Path Extraction Logic Flaw
 - **Severity:** P1 (High Forensic Inaccuracy)
 - **Category:** Execution History
-- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Scanners/HistoricalEvidenceScanner.cs:98-125`](file:///c:/Users/TANMAY%20GARG/Desktop/ssing%20tool/backend/src/MinecraftSsForensics.Scanner/Scanners/HistoricalEvidenceScanner.cs#L98-L125)
+- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Scanners/HistoricalEvidenceScanner.cs:98-125`](backend/src/MinecraftSsForensics.Scanner/Scanners/HistoricalEvidenceScanner.cs#L98-L125)
 - **Description & Root Cause:**
   In Windows Background Activity Moderator (`BAM`), the registry key values contain paths in the format `\Device\HarddiskVolumeX\path\to\file.exe`. The scanner splits strings by backslashes without translating volume device paths to drive letters, and assumes the last component is always the executable name without verifying file existence or resolving device prefixes.
 - **Exploitation / Failure Mode:**
@@ -188,7 +188,7 @@
 ### [BUG-P1-05] JNA Extraction Cache Scanning Race Condition
 - **Severity:** P1 (High Forensic Inaccuracy)
 - **Category:** Process & Memory Inspection
-- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Scanners/ProcessScanner.cs:189-215`](file:///c:/Users/TANMAY%20GARG/Desktop/ssing%20tool/backend/src/MinecraftSsForensics.Scanner/Scanners/ProcessScanner.cs#L189-L215)
+- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Scanners/ProcessScanner.cs:189-215`](backend/src/MinecraftSsForensics.Scanner/Scanners/ProcessScanner.cs#L189-L215)
 - **Description & Root Cause:**
   The scanner attempts to detect in-memory cheat injection by looking for JNA (Java Native Access) temp folders in `%TEMP%\jna-*\`. It reads DLLs extracted by JNA and checks if they match cheat signatures. However, JNA cleans up these files upon JVM termination, and concurrent file locking prevents read access while the JVM has the DLL mapped.
 - **Exploitation / Failure Mode:**
@@ -205,7 +205,7 @@
 ### [BUG-P2-01] Fake Directory Recursion in File Discovery
 - **Severity:** P2 (Medium)
 - **Category:** File System Discovery
-- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Scanners/FileDiscoveryScanner.cs:49, 67`](file:///c:/Users/TANMAY%20GARG/Desktop/ssing%20tool/backend/src/MinecraftSsForensics.Scanner/Scanners/FileDiscoveryScanner.cs#L49)
+- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Scanners/FileDiscoveryScanner.cs:49, 67`](backend/src/MinecraftSsForensics.Scanner/Scanners/FileDiscoveryScanner.cs#L49)
 - **Description & Root Cause:**
   `ScanDirectory` defines a parameter `int maxDepth = 2`:
   ```csharp
@@ -227,7 +227,7 @@
 ### [BUG-P2-02] Bytecode Analyzer Inspects Constant Pool Strings Only
 - **Severity:** P2 (Medium)
 - **Category:** Static Analysis
-- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Scanners/StaticBytecodeAnalyzer.cs:104-180`](file:///c:/Users/TANMAY%20GARG/Desktop/ssing%20tool/backend/src/MinecraftSsForensics.Scanner/Scanners/StaticBytecodeAnalyzer.cs#L104-L180)
+- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Scanners/StaticBytecodeAnalyzer.cs:104-180`](backend/src/MinecraftSsForensics.Scanner/Scanners/StaticBytecodeAnalyzer.cs#L104-L180)
 - **Description & Root Cause:**
   `AnalyzeClassFile` parses the class file constant pool and extracts `CONSTANT_Utf8` entries. It searches these raw strings for keywords like `"autoclicker"`, `"aimassist"`, `"reach"`. It does not parse JVM bytecode instructions, method attributes, opcodes (`invokevirtual`, `getfield`), or ASM structures.
 - **Exploitation / Failure Mode:**
@@ -242,8 +242,8 @@
 - **Severity:** P2 (Medium)
 - **Category:** Registry Forensics
 - **Location:**
-  - [`backend/src/MinecraftSsForensics.Scanner/Scanners/UsbHistoryScanner.cs:36-43`](file:///c:/Users/TANMAY%20GARG/Desktop/ssing%20tool/backend/src/MinecraftSsForensics.Scanner/Scanners/UsbHistoryScanner.cs#L36-L43)
-  - [`backend/src/MinecraftSsForensics.Scanner/Scanners/RegistryScanner.cs:54-70`](file:///c:/Users/TANMAY%20GARG/Desktop/ssing%20tool/backend/src/MinecraftSsForensics.Scanner/Scanners/RegistryScanner.cs#L54-L70)
+  - [`backend/src/MinecraftSsForensics.Scanner/Scanners/UsbHistoryScanner.cs:36-43`](backend/src/MinecraftSsForensics.Scanner/Scanners/UsbHistoryScanner.cs#L36-L43)
+  - [`backend/src/MinecraftSsForensics.Scanner/Scanners/RegistryScanner.cs:54-70`](backend/src/MinecraftSsForensics.Scanner/Scanners/RegistryScanner.cs#L54-L70)
 - **Description & Root Cause:**
   1. `UsbHistoryScanner` reads device names from `SYSTEM\CurrentControlSet\Enum\USBSTOR` but leaves `LastConnectedTime` as `null` because it does not read the registry key's last write time or setupapi installation logs.
   2. `RegistryScanner` reads UserAssist ROT13-encoded value names, but ignores the 72-byte binary payload (where byte offset 4 stores execution count and offset 60 stores the last execution 64-bit `FILETIME`).
@@ -255,7 +255,7 @@
 ### [BUG-P2-04] Incomplete Event Log Query & Truncation
 - **Severity:** P2 (Medium)
 - **Category:** Event Log Forensics
-- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Scanners/ServiceAndDriverScanner.cs:82-105`](file:///c:/Users/TANMAY%20GARG/Desktop/ssing%20tool/backend/src/MinecraftSsForensics.Scanner/Scanners/ServiceAndDriverScanner.cs#L82-L105)
+- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Scanners/ServiceAndDriverScanner.cs:82-105`](backend/src/MinecraftSsForensics.Scanner/Scanners/ServiceAndDriverScanner.cs#L82-L105)
 - **Description & Root Cause:**
   The query for Event ID 7045 (Service/Driver Installed) reads entries synchronously from `System.Diagnostics.EventLog` without filtering at the log reader level, capping results arbitrarily at 50 entries. If a machine has had more than 50 service installations, recent driver installations may be truncated.
 - **Remediation:**
@@ -278,7 +278,7 @@
 ### [BUG-P2-06] Mod Policy Engine File Path Normalization Inconsistencies
 - **Severity:** P2 (Medium)
 - **Category:** Policy Evaluation
-- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Policy/ModPolicyEngine.cs:78-95`](file:///c:/Users/TANMAY%20GARG/Desktop/ssing%20tool/backend/src/MinecraftSsForensics.Scanner/Policy/ModPolicyEngine.cs#L78-L95)
+- **Location:** [`backend/src/MinecraftSsForensics.Scanner/Policy/ModPolicyEngine.cs:78-95`](backend/src/MinecraftSsForensics.Scanner/Policy/ModPolicyEngine.cs#L78-L95)
 - **Description:**
   Path comparisons in policy matching use mixed forward slashes and backslashes without calling `Path.GetFullPath()`, causing rules targeted at specific relative or absolute mod paths to fail to match depending on how the launcher launched the game.
 
@@ -307,3 +307,4 @@
 - **Severity:** P3 (Low)
 - **Location:** `RegistryScanner.cs:78-90`
 - **Description:** RecentDocs reads value names ("0", "1") without parsing the binary MRU filename structure, yielding empty file targets.
+

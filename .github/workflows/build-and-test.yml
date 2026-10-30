@@ -1,0 +1,53 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build & Verify (Windows x64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore Dependencies
+        run: dotnet restore backend/MinecraftSsForensics.sln
+
+      - name: Build Solution (Release)
+        run: dotnet build backend/MinecraftSsForensics.sln -c Release --no-restore
+
+      - name: Run Complete Automated Test Suite (79 Tests)
+        run: dotnet test backend/MinecraftSsForensics.sln -c Release --no-build --logger "console;verbosity=normal"
+
+      - name: Publish Scanner App (Self-Contained)
+        run: >
+          dotnet publish backend/src/MinecraftSsForensics.Scanner.App/MinecraftSsForensics.Scanner.App.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          -o dist/ci-test
+
+      - name: Publish Viewer App (Self-Contained)
+        run: >
+          dotnet publish backend/src/MinecraftSsForensics.Viewer.App/MinecraftSsForensics.Viewer.App.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          -o dist/ci-test
+
+      - name: Verify Binary Checksums
+        shell: pwsh
+        run: |
+          Get-FileHash dist/ci-test/*.exe -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLowerInvariant())  $([System.IO.Path]::GetFileName($_.Path))" } |
+            Out-File -FilePath dist/ci-test/checksums.sha256 -Encoding utf8
+          Get-Content dist/ci-test/checksums.sha256

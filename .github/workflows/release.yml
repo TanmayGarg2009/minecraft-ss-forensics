@@ -28,7 +28,7 @@ jobs:
       - name: Restore Dependencies
         run: dotnet restore backend/MinecraftSsForensics.sln
 
-      - name: Run Forensic Test Suite (56 Verification Scenarios)
+      - name: Run Forensic Test Suite (79 Automated Verification Tests)
         run: dotnet test backend/MinecraftSsForensics.sln --configuration Release --verbosity normal
 
       - name: Publish Scanner Standalone Executable
@@ -51,15 +51,19 @@ jobs:
           -p:IncludeNativeLibrariesForSelfExtract=true
           --output dist
 
-      - name: Rename and Generate SHA-256 Checksums
+      - name: Generate SHA-256 Checksums
         shell: pwsh
         run: |
-          Move-Item dist/MinecraftSsForensics.Scanner.App.exe dist/MinecraftSsForensics.exe -Force
+          if (Test-Path "dist/MinecraftSsForensics.Scanner.App.exe") {
+            Move-Item "dist/MinecraftSsForensics.Scanner.App.exe" "dist/MinecraftSsForensics.exe" -Force
+          }
           $hashScanner = (Get-FileHash dist/MinecraftSsForensics.exe -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hashScanner  MinecraftSsForensics.exe" | Out-File -FilePath dist/MinecraftSsForensics.exe.sha256 -Encoding utf8
 
           $hashViewer = (Get-FileHash dist/MinecraftSsForensics.Viewer.exe -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hashViewer  MinecraftSsForensics.Viewer.exe" | Out-File -FilePath dist/MinecraftSsForensics.Viewer.exe.sha256 -Encoding utf8
+
+          "$hashScanner  MinecraftSsForensics.exe`n$hashViewer  MinecraftSsForensics.Viewer.exe" | Out-File -FilePath dist/checksums.sha256 -Encoding utf8
 
           Write-Host "Published Scanner SHA-256: $hashScanner"
           Write-Host "Published Viewer SHA-256:  $hashViewer"
@@ -73,6 +77,7 @@ jobs:
             dist/MinecraftSsForensics.exe.sha256
             dist/MinecraftSsForensics.Viewer.exe
             dist/MinecraftSsForensics.Viewer.exe.sha256
+            dist/checksums.sha256
             launch.ps1
           generate_release_notes: true
           draft: false
