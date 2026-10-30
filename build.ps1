@@ -23,16 +23,17 @@ param(
 $ErrorActionPreference = 'Stop'
 
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host " Minecraft SS Forensics — Reproducible Build Pipeline" -ForegroundColor Cyan
+Write-Host " Minecraft SS Forensics - Reproducible Build Pipeline" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
 # 1. Check or locate .NET 8.0 SDK
 Write-Host "[1/6] Checking .NET SDK environment..." -ForegroundColor Yellow
+$userDotnet = Join-Path $env:USERPROFILE ".dotnet"
 if ($env:DOTNET_ROOT -and (Test-Path $env:DOTNET_ROOT)) {
-    $env:PATH = "$env:DOTNET_ROOT;$env:PATH"
-} elseif (Test-Path "$env:USERPROFILE\.dotnet") {
-    $env:DOTNET_ROOT = "$env:USERPROFILE\.dotnet"
-    $env:PATH = "$env:DOTNET_ROOT;$env:PATH"
+    $env:PATH = "$($env:DOTNET_ROOT);$($env:PATH)"
+} elseif (Test-Path $userDotnet) {
+    $env:DOTNET_ROOT = $userDotnet
+    $env:PATH = "$userDotnet;$($env:PATH)"
 }
 
 try {
@@ -114,6 +115,6 @@ $checksumLines | Out-File -FilePath $manifestPath -Encoding utf8
 Write-Host "      Checksum manifest saved to: $manifestPath" -ForegroundColor Green
 
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host " Build & Publishing Completed Successfully!" -ForegroundColor Green
+Write-Host " Build and Publishing Completed Successfully!" -ForegroundColor Green
 Write-Host " Output Directory: $resolvedOutputDir" -ForegroundColor White
 Write-Host "==========================================================" -ForegroundColor Cyan
