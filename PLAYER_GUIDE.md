@@ -28,7 +28,7 @@ You can run the scanner using either the pre-compiled executable or the verified
 Open Windows PowerShell (Run as Administrator recommended for full prefetch access) and paste:
 
 ```powershell
-& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $dir = "$env:TEMP\MinecraftForensics"; New-Item -ItemType Directory -Path $dir -Force | Out-Null; $exe = "$dir\MinecraftSsForensics.exe"; Invoke-WebRequest -Uri "https://github.com/minecraft-ss-forensics/minecraft-ss-forensics/releases/latest/download/MinecraftSsForensics.exe" -OutFile $exe; $expected = ((Invoke-WebRequest -Uri "https://github.com/minecraft-ss-forensics/minecraft-ss-forensics/releases/latest/download/MinecraftSsForensics.exe.sha256").Content -split '\s+')[0].ToLowerInvariant(); if ((Get-FileHash -Path $exe -Algorithm SHA256).Hash.ToLowerInvariant() -eq $expected) { Start-Process -FilePath $exe } else { Write-Error "SHA-256 verification failed!" } }
+& { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $repo = "TanmayGarg2009/minecraft-ss-forensics"; $dir = "$env:TEMP\MinecraftForensics"; New-Item -ItemType Directory -Path $dir -Force | Out-Null; $exe = "$dir\MinecraftSsForensics.exe"; Invoke-WebRequest -Uri "https://github.com/$repo/releases/latest/download/MinecraftSsForensics.exe" -OutFile $exe; $expected = ((Invoke-WebRequest -Uri "https://github.com/$repo/releases/latest/download/MinecraftSsForensics.exe.sha256").Content -split '\s+')[0].ToLowerInvariant(); if ((Get-FileHash -Path $exe -Algorithm SHA256).Hash.ToLowerInvariant() -eq $expected) { Start-Process -FilePath $exe } else { Write-Error "SHA-256 verification failed!" } }
 ```
 
 > [!NOTE]

@@ -23,7 +23,7 @@
 
 [CmdletBinding()]
 param(
-    [string]$Repository = "minecraft-ss-forensics/minecraft-ss-forensics",
+    [string]$Repository = "TanmayGarg2009/minecraft-ss-forensics",
     [string]$TargetDirectory = "$env:LOCALAPPDATA\MinecraftSsForensics",
     [switch]$SkipLaunch
 )

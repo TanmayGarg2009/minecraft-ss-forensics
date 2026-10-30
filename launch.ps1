@@ -9,7 +9,7 @@
 
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$repo = "minecraft-ss-forensics/minecraft-ss-forensics"
+$repo = "TanmayGarg2009/minecraft-ss-forensics"
 $releaseUrl = "https://github.com/$repo/releases/latest/download/MinecraftSsForensics.exe"
 $checksumUrl = "https://github.com/$repo/releases/latest/download/MinecraftSsForensics.exe.sha256"
 
