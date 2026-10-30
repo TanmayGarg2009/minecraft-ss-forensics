@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Windows;
 using Microsoft.Win32;
@@ -6,6 +8,7 @@ using MinecraftSsForensics.Api.Models.Domain;
 using MinecraftSsForensics.Api.Models.Dtos.Ingestion;
 using MinecraftSsForensics.Scanner.Client;
 using MinecraftSsForensics.Scanner.Engine;
+using MinecraftSsForensics.Scanner.Export;
 using MinecraftSsForensics.Scanner.Policy;
 
 namespace MinecraftSsForensics.Scanner.App;
@@ -341,6 +344,49 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             MessageBox.Show($"Deletion request failed: {ex.Message}", "Deletion Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void BtnDownloadReport_Click(object sender, RoutedEventArgs e)
+    {
+        if (_scannedReport == null)
+        {
+            MessageBox.Show("No completed forensic report is available to export.", "Export Unavailable", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        string? publicId = _uploadResult?.PublicId;
+        var dialog = new SaveFileDialog
+        {
+            Title = "Save Forensic Report for AI / Offline Analysis",
+            Filter = "JSON Forensic Report (*.json)|*.json|AI-Friendly Markdown Report (*.md)|*.md|All Files (*.*)|*.*",
+            FilterIndex = 1,
+            FileName = ReportExporter.GenerateSuggestedFilename(_scannedReport, ReportExportFormat.Json, publicId)
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            try
+            {
+                var format = dialog.FileName.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
+                    ? ReportExportFormat.Markdown
+                    : ReportExportFormat.Json;
+
+                var export = ReportExporter.GenerateExport(_scannedReport, format, publicId);
+                File.WriteAllText(dialog.FileName, export.Content, Encoding.UTF8);
+
+                LblStatus.Text = $"Export saved successfully: {Path.GetFileName(dialog.FileName)}";
+                MessageBox.Show(
+                    $"Report successfully exported to:\n{dialog.FileName}\n\nFormat: {format}\nSize: {export.ByteCount:N0} bytes\n\nThis file can be provided to an AI model or archived for offline forensic investigation.",
+                    "Report Exported",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                LblStatus.Text = $"Export failed: {ex.Message}";
+                MessageBox.Show($"Failed to save report export:\n{ex.Message}", "Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
     }
 

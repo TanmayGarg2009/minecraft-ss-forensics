@@ -351,10 +351,13 @@
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 
                                 <Button x:Name="BtnDiscardScan" Grid.Column="0" Content="Discard &amp; Start Over" Click="BtnDiscardScan_Click"/>
-                                <Button x:Name="BtnConfirmUpload" Grid.Column="2" Style="{StaticResource PrimaryButton}" Content="Confirm &amp; Upload Report to Server" Click="BtnConfirmUpload_Click"/>
+                                <Button x:Name="BtnDownloadPreUpload" Grid.Column="2" Content="💾 Download Full Report..." Background="#1E293B" Foreground="#38BDF8" BorderBrush="#334155" Padding="12,6" FontWeight="SemiBold" Click="BtnDownloadReport_Click" ToolTip="Download a local copy of this forensic report before uploading (.json or .md)"/>
+                                <Button x:Name="BtnConfirmUpload" Grid.Column="4" Style="{StaticResource PrimaryButton}" Content="Confirm &amp; Upload Report to Server" Click="BtnConfirmUpload_Click"/>
                             </Grid>
                         </StackPanel>
                     </Border>
@@ -423,10 +426,13 @@
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
 
                                 <Button x:Name="BtnDeleteReportNow" Grid.Column="0" Style="{StaticResource DangerButton}" Content="Delete Report from Server Now" Click="BtnDeleteReportNow_Click"/>
-                                <Button x:Name="BtnNewScan" Grid.Column="2" Content="Start New Scan" Click="BtnNewScan_Click"/>
+                                <Button x:Name="BtnDownloadPostUpload" Grid.Column="2" Content="💾 Download Full Report..." Background="#1E293B" Foreground="#38BDF8" BorderBrush="#334155" Padding="12,6" FontWeight="SemiBold" Click="BtnDownloadReport_Click" ToolTip="Download an offline forensic report for second-stage AI analysis (.json or .md)"/>
+                                <Button x:Name="BtnNewScan" Grid.Column="4" Content="Start New Scan" Click="BtnNewScan_Click"/>
                             </Grid>
                         </StackPanel>
                     </Border>

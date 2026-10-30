@@ -95,11 +95,11 @@ export const OverviewSection: React.FC<OverviewSectionProps> = ({
 
             <button
               onClick={onExportJson}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition"
-              title="Export complete report as JSON"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-sky-950/80 hover:bg-sky-900/80 text-sky-300 border border-sky-800 transition"
+              title="Download full forensic report (.json or .md) for AI or offline analysis"
             >
-              <Download className="w-3.5 h-3.5 text-slate-400" />
-              <span>Export JSON</span>
+              <Download className="w-3.5 h-3.5 text-sky-400" />
+              <span>Download Report</span>
             </button>
 
             {onInspectRawJson && (
