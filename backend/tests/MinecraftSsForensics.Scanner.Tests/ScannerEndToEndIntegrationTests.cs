@@ -193,6 +193,12 @@ public class ScannerEndToEndIntegrationTests : IClassFixture<TestApiFactory>, ID
         Assert.StartsWith("del_", uploadResult.DeletionKey);
         Assert.Contains($"/report/{uploadResult.PublicId}", uploadResult.ShareUrl);
 
+        // Verify share URL construction via ReportShareUrlBuilder
+        string desktopShareUrl = ReportShareUrlBuilder.BuildShareUrl("http://localhost:3000", uploadResult.PublicId, isProduction: false);
+        Assert.Equal($"http://localhost:3000/report/{uploadResult.PublicId}", desktopShareUrl);
+        Assert.DoesNotContain("5000", desktopShareUrl);
+        Assert.DoesNotContain(uploadResult.DeletionKey, desktopShareUrl);
+
         // 5. Act - Retrieve Report from API via GET /api/v1/reports/{publicId}
         var getResponse = await httpClient.GetAsync($"/api/v1/reports/{uploadResult.PublicId}");
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);

@@ -11,11 +11,13 @@ namespace MinecraftSsForensics.Api.Controllers;
 public class ReportsController : ControllerBase
 {
     private readonly IReportService _reportService;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<ReportsController> _logger;
 
-    public ReportsController(IReportService reportService, ILogger<ReportsController> logger)
+    public ReportsController(IReportService reportService, IConfiguration configuration, ILogger<ReportsController> logger)
     {
         _reportService = reportService;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -35,8 +37,29 @@ public class ReportsController : ControllerBase
             return BadRequest(new { Message = "Report submission validation failed.", Errors = errors });
         }
 
-        var baseUrl = $"{Request.Scheme}://{Request.Host}";
-        var result = await _reportService.SubmitReportAsync(request, baseUrl, cancellationToken);
+        // Determine public frontend base URL to construct the viewer share link
+        string frontendBaseUrl;
+        if (Request.Headers.TryGetValue("X-Frontend-Base-Url", out var headerUrl) && !string.IsNullOrWhiteSpace(headerUrl))
+        {
+            frontendBaseUrl = headerUrl.ToString();
+        }
+        else
+        {
+            var configured = _configuration["Frontend:PublicBaseUrl"];
+            if (!string.IsNullOrWhiteSpace(configured))
+            {
+                frontendBaseUrl = configured;
+            }
+            else
+            {
+                // In local development, frontend runs on port 3000 while API runs on port 5000
+                frontendBaseUrl = (Request.Host.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || Request.Host.Host.Equals("127.0.0.1"))
+                    ? "http://localhost:3000"
+                    : $"{Request.Scheme}://{Request.Host}";
+            }
+        }
+
+        var result = await _reportService.SubmitReportAsync(request, frontendBaseUrl, cancellationToken);
 
         return CreatedAtAction(nameof(GetReport), new { publicId = result.PublicId }, result);
     }

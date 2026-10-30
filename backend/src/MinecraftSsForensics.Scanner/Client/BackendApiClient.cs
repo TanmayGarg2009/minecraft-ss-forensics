@@ -12,7 +12,7 @@ public class DeleteReportResponse
 
 public interface IBackendApiClient
 {
-    Task<SubmitReportResponse> SubmitReportAsync(SubmitReportRequest report, CancellationToken ct = default);
+    Task<SubmitReportResponse> SubmitReportAsync(SubmitReportRequest report, string? frontendBaseUrl = null, CancellationToken ct = default);
     Task<DeleteReportResponse> DeleteReportAsync(string publicId, string deletionKey, CancellationToken ct = default);
 }
 
@@ -39,7 +39,7 @@ public class BackendApiClient : IBackendApiClient
         }
     }
 
-    public async Task<SubmitReportResponse> SubmitReportAsync(SubmitReportRequest report, CancellationToken ct = default)
+    public async Task<SubmitReportResponse> SubmitReportAsync(SubmitReportRequest report, string? frontendBaseUrl = null, CancellationToken ct = default)
     {
         // 1. Validate payload locally
         byte[] payloadBytes = JsonSerializer.SerializeToUtf8Bytes(report, JsonOptions);
@@ -57,6 +57,11 @@ public class BackendApiClient : IBackendApiClient
         {
             CharSet = "utf-8"
         };
+
+        if (!string.IsNullOrWhiteSpace(frontendBaseUrl))
+        {
+            request.Headers.Add("X-Frontend-Base-Url", frontendBaseUrl.Trim());
+        }
 
         using var response = await _httpClient.SendAsync(request, ct);
 

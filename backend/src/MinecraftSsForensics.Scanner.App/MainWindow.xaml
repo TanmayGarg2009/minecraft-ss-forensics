@@ -104,9 +104,18 @@
                 </StackPanel>
                 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="API Endpoint:" VerticalAlignment="Center" Foreground="#94A3B8" FontSize="12" Margin="0,0,8,0"/>
-                    <TextBox x:Name="TxtApiUrl" Text="http://localhost:5000" Width="180" Height="26" 
-                             Background="#0F172A" Foreground="#E2E8F0" BorderBrush="#334155" Padding="6,3" FontSize="11" VerticalContentAlignment="Center"/>
+                    <StackPanel Margin="0,0,10,0">
+                        <TextBlock Text="API Endpoint:" Foreground="#94A3B8" FontSize="10" Margin="0,0,0,2"/>
+                        <TextBox x:Name="TxtApiUrl" Text="http://localhost:5000" Width="145" Height="24" 
+                                 Background="#0F172A" Foreground="#E2E8F0" BorderBrush="#334155" Padding="4,2" FontSize="11" VerticalContentAlignment="Center"
+                                 ToolTip="Backend API URL for ingestion (default http://localhost:5000)"/>
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock Text="Web Viewer URL:" Foreground="#94A3B8" FontSize="10" Margin="0,0,0,2"/>
+                        <TextBox x:Name="TxtFrontendUrl" Text="http://localhost:3000" Width="145" Height="24" 
+                                 Background="#0F172A" Foreground="#E2E8F0" BorderBrush="#334155" Padding="4,2" FontSize="11" VerticalContentAlignment="Center"
+                                 ToolTip="Public Frontend dashboard URL for staff viewing (default http://localhost:3000)"/>
+                    </StackPanel>
                 </StackPanel>
             </Grid>
         </Border>
@@ -347,21 +356,23 @@
                             </Border>
 
                             <!-- Share URL Box -->
-                            <TextBlock Text="1. Shareable Report Link (Give this to Staff):" FontWeight="Bold" Foreground="#E2E8F0" FontSize="13" Margin="0,0,0,6"/>
+                            <TextBlock Text="1. Public Shareable Report Link (Send this URL to Staff):" FontWeight="Bold" Foreground="#E2E8F0" FontSize="13" Margin="0,0,0,6"/>
                             <Border Background="#0F172A" BorderBrush="#1E293B" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,18">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBox x:Name="TxtShareUrl" IsReadOnly="True" Background="Transparent" Foreground="#38BDF8" BorderThickness="0" 
                                              FontWeight="Bold" FontSize="12" VerticalAlignment="Center"/>
                                     <Button x:Name="BtnCopyShareUrl" Grid.Column="1" Content="Copy Link" Margin="8,0,0,0" Click="BtnCopyShareUrl_Click"/>
+                                    <Button x:Name="BtnOpenInBrowser" Grid.Column="2" Content="Open in Browser" Margin="6,0,0,0" Click="BtnOpenInBrowser_Click"/>
                                 </Grid>
                             </Border>
 
                             <!-- Deletion Key Box -->
-                            <TextBlock Text="2. Secret Deletion Key (Keep private — allows wiping report):" FontWeight="Bold" Foreground="#F59E0B" FontSize="13" Margin="0,0,0,6"/>
+                            <TextBlock Text="2. Secret Deletion Key (KEEP PRIVATE — DO NOT SEND TO STAFF):" FontWeight="Bold" Foreground="#F59E0B" FontSize="13" Margin="0,0,0,6"/>
                             <Border Background="#0F172A" BorderBrush="#78350F" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,18">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -375,7 +386,7 @@
                             </Border>
 
                             <TextBlock TextWrapping="Wrap" Foreground="#94A3B8" FontSize="11" Margin="0,0,0,20">
-                                ℹ Anyone with the share link can view your report in a web browser without logging in. When your screenshare investigation concludes, you can immediately wipe the report using the button below.
+                                ℹ Staff open the public share link in their browser to review findings. Your private deletion key stays with you and is never shown in the public link or staff view.
                             </TextBlock>
 
                             <!-- Actions -->

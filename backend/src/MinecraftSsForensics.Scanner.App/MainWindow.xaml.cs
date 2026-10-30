@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using System.Windows;
 using Microsoft.Win32;
@@ -151,7 +152,18 @@ public partial class MainWindow : Window
     {
         if (_scannedReport == null) return;
 
-        string apiUrl = string.IsNullOrWhiteSpace(TxtApiUrl.Text) ? "http://localhost:5000" : TxtApiUrl.Text.Trim();
+        string apiUrl = string.IsNullOrWhiteSpace(TxtApiUrl.Text) ? ReportShareUrlBuilder.DefaultDevApiUrl : TxtApiUrl.Text.Trim();
+        string frontendUrl = string.IsNullOrWhiteSpace(TxtFrontendUrl.Text) ? ReportShareUrlBuilder.DefaultDevFrontendUrl : TxtFrontendUrl.Text.Trim();
+
+        bool isProduction = Environment.GetEnvironmentVariable("MINECRAFT_SS_ENV")?.Equals("production", StringComparison.OrdinalIgnoreCase) == true;
+
+        var (isValid, configError) = ReportShareUrlBuilder.ValidateConfiguration(apiUrl, frontendUrl, isProduction);
+        if (!isValid)
+        {
+            MessageBox.Show(configError, "Configuration Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
         _apiClient = new BackendApiClient(apiUrl);
 
         SwitchView("Uploading");
@@ -159,9 +171,12 @@ public partial class MainWindow : Window
 
         try
         {
-            _uploadResult = await _apiClient.SubmitReportAsync(_scannedReport);
+            _uploadResult = await _apiClient.SubmitReportAsync(_scannedReport, frontendUrl);
 
-            TxtShareUrl.Text = _uploadResult.ShareUrl;
+            // Construct explicit public frontend viewer share URL
+            string shareUrl = ReportShareUrlBuilder.BuildShareUrl(frontendUrl, _uploadResult.PublicId, isProduction);
+
+            TxtShareUrl.Text = shareUrl;
             TxtDeletionKey.Text = _uploadResult.DeletionKey;
             LblResultMessage.Text = $"{_uploadResult.Message} (Expires: {_uploadResult.ExpiresAt.LocalDateTime:g})";
 
@@ -183,6 +198,25 @@ public partial class MainWindow : Window
             Clipboard.SetText(TxtShareUrl.Text);
             LblStatus.Text = "Share URL copied to clipboard! Provide this link to server staff.";
             MessageBox.Show("Share link copied to clipboard!\n\nSend this URL to the server anti-cheat staff.", "Link Copied", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+    }
+
+    private void BtnOpenInBrowser_Click(object sender, RoutedEventArgs e)
+    {
+        if (!string.IsNullOrEmpty(TxtShareUrl.Text))
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = TxtShareUrl.Text,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Could not launch default browser:\n{ex.Message}", "Browser Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
         }
     }
 

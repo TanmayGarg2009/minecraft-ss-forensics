@@ -20,14 +20,16 @@ The Stage 2 scanner is responsible for:
 - **Payload Max Size**: 15 MB
 - **Timeout Recommendation**: 30 seconds
 
-### Required Headers
+### Required & Optional Headers
 ```http
 POST /api/v1/reports HTTP/1.1
 Host: <backend-host>
 Content-Type: application/json; charset=utf-8
 Accept: application/json
 User-Agent: MinecraftSsScanner/1.0.0 (Windows NT 10.0; Win64; x64)
+X-Frontend-Base-Url: https://ss.example.org
 ```
+- `X-Frontend-Base-Url` *(Optional)*: Specifies the public frontend dashboard base URL so the backend generates a valid staff viewer share URL instead of falling back to backend API ports.
 
 ---
 

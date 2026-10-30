@@ -7,28 +7,55 @@ import { UploadDemoPage } from './pages/UploadDemoPage';
 
 export function App() {
   const [currentRoute, setCurrentRoute] = useState<{ page: 'home' | 'report' | 'ingest'; publicId?: string }>(() => {
-    return parseHash(window.location.hash);
+    return parseCurrentLocation();
   });
 
-  function parseHash(hash: string): { page: 'home' | 'report' | 'ingest'; publicId?: string } {
-    const clean = hash.replace(/^#\/?/, '');
-    if (clean.startsWith('report/')) {
-      const publicId = clean.replace('report/', '');
-      return { page: 'report', publicId };
+  function parseCurrentLocation(): { page: 'home' | 'report' | 'ingest'; publicId?: string } {
+    // 1. Check hash first (e.g. #/report/mc_123 or #report/mc_123)
+    const hash = window.location.hash.replace(/^#\/?/, '');
+    if (hash.startsWith('report/')) {
+      const publicId = hash.replace('report/', '').split('/')[0];
+      if (publicId) return { page: 'report', publicId };
     }
-    if (clean === 'ingest') {
+    if (hash === 'ingest') {
       return { page: 'ingest' };
     }
+
+    // 2. Check pathname next (e.g. /report/mc_123)
+    const pathname = window.location.pathname.replace(/^\//, '');
+    if (pathname.startsWith('report/')) {
+      const publicId = pathname.replace('report/', '').split('/')[0];
+      if (publicId) return { page: 'report', publicId };
+    }
+    if (pathname === 'ingest') {
+      return { page: 'ingest' };
+    }
+
+    // 3. Check search query parameter (e.g. ?report=mc_123)
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const queryId = searchParams.get('report') || searchParams.get('id');
+      if (queryId) {
+        return { page: 'report', publicId: queryId };
+      }
+    } catch {
+      // Ignore URL parsing errors
+    }
+
     return { page: 'home' };
   }
 
   useEffect(() => {
-    const handleHashChange = () => {
-      setCurrentRoute(parseHash(window.location.hash));
+    const handleRouteChange = () => {
+      setCurrentRoute(parseCurrentLocation());
     };
 
-    window.addEventListener('hashchange', handleHashChange);
-    return () => window.removeEventListener('hashchange', handleHashChange);
+    window.addEventListener('hashchange', handleRouteChange);
+    window.addEventListener('popstate', handleRouteChange);
+    return () => {
+      window.removeEventListener('hashchange', handleRouteChange);
+      window.removeEventListener('popstate', handleRouteChange);
+    };
   }, []);
 
   const navigateToReport = (publicId: string) => {
