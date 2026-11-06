@@ -17,6 +17,11 @@ public class ModMetadata
     public List<string> SuspiciousNotes { get; set; } = new();
     public List<string> MatchedCheatSignatures { get; set; } = new();
     public BytecodeAnalysisResult BytecodeAnalysis { get; set; } = new();
+    public bool IsHiddenFile { get; set; }
+    public bool IsSystemFile { get; set; }
+    public string? DownloadSourceDomain { get; set; }
+    public string? DownloadSourceUrl { get; set; }
+    public string? DownloadSourceCategory { get; set; }
     public bool ParseSuccess { get; set; }
     public string? ParseError { get; set; }
 }

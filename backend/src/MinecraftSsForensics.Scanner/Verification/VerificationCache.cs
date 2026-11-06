@@ -31,6 +31,8 @@ public class VerificationCache : IVerificationCache
             {
                 result = entry.Result;
                 result.IsCached = true;
+                result.CacheRetrievedAtUtc = DateTime.UtcNow;
+                result.CacheProvenance = $"Disk/Memory Cache (Expires: {entry.ExpiresAtUtc:O})";
                 return true;
             }
             _entries.TryRemove(hashKey, out _);

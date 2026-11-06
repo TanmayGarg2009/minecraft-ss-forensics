@@ -1,36 +1,74 @@
 # Staff Guide — Forensic Investigation & Report Review
 
-**Audience:** Minecraft Server Staff, Tournament Referees, Anti-Cheat Teams  
-**Application:** `MinecraftSsForensics.Viewer.exe`
+This guide outlines the methodology for server staff, referees, and anti-cheat reviewers using **`MinecraftSsForensics.Viewer.exe`** to verify player reports, evaluate evidence, and render defensible disciplinary decisions.
 
 ---
 
 ## 1. Opening a Player Report
 
-1. Launch `MinecraftSsForensics.Viewer.exe`.
-2. Click **Open Report File (.json)** and select the `.json` file provided by the player.
-3. **Verify Integrity Seal Badge**:
-   - **Green Badge ("Cryptographic Integrity Verified")**: Confirms that every finding, mod, path, and timestamp matches the `SHA256-CANONICAL-V2` digest generated at scan time.
-   - **Red Badge ("Integrity Mismatch / Tampered")**: Indicates that the report file was modified, edited in a text editor, or corrupted after generation. **Do not trust tampered reports.**
+1. Launch `MinecraftSsForensics.Viewer.exe` on your workstation.
+2. Click **Open Report File (.json)**.
+3. Select the `.json` report provided by the player.
+4. **Immediate Seal Check**:
+   - The viewer automatically computes the `SHA256-CANONICAL-V2` digest of the payload.
+   - If the seal matches, a green banner appears: `✓ SEAL VALID: Authentic Unmodified Report`.
+   - If any finding, count, or metadata field was edited, a red banner appears: `⚠ TAMPER DETECTED: Report payload does not match cryptographic seal`. Reject tampered reports immediately.
 
 ---
 
-## 2. Navigating the Investigation Workstation
+## 2. Navigating the Investigation Interface
 
-### 1. Executive Summary & Verdict
-- Answers the three fundamental questions within 5 seconds:
-  1. *Was anything suspicious found?*
-  2. *What was found?*
-  3. *What is the strength of the evidence?*
+The viewer provides an intuitive multi-tab interface:
 
-### 2. Mod Inventory & Authenticity
-- Inspects every installed JAR.
-- Displays Modrinth / CurseForge verification state, official project URLs, and SHA-256 hashes.
-- Separates authenticity from gameplay policy: a verified official mod can still be prohibited by server rules.
+### 2.1 Overview & Executive Summary
+- Displays overall verdict (`CLEAN`, `SUSPICIOUS`, or `VIOLATION_CONFIRMED`).
+- Highlights critical counts: Prohibited Possession, Prohibited Execution, Unverified Mods, and Duplicate Files.
+- Displays player environment: OS version, system architecture, scan duration, and execution privileges (Standard vs Administrator).
 
-### 3. Correlated Assessments (The 8 Software States)
-- Review whether software was merely `Present` in Downloads, `Installed` in mods, or actively `Loaded in Game Session`.
-- Remember: Under `PROHIBITED_EXECUTION` rules, mere file presence without execution proof is NOT a violation. Under `PROHIBITED_POSSESSION` rules, presence alone constitutes a breach.
+### 2.2 Finding Records & Evidence Chains
+Click any finding to inspect its multi-layer evidentiary corroboration:
+- **Rule Violated**: Policy rule triggered (e.g., `RULE-METEOR: Meteor Client`, `RULE-CRYSTAL-WALKSY: Walksy Crystal Optimizer`).
+- **Software State**: Strict classification among the 8 software states:
+  - `SoftwarePresent`: File located on disk or in Recycle Bin.
+  - `SoftwareInstalled`: Placed in active launcher profile `mods/` folder.
+  - `SoftwareExecuted`: Recorded in Prefetch, BAM/DAM, or PCA.
+  - `SoftwareActiveDuringSession`: Executed concurrently with Minecraft.
+  - `SoftwareInteractingWithMinecraft`: Injected or mapped into `javaw.exe`.
+  - `ProhibitedFunctionalityUsed`: Corroborated combat or movement automation.
+- **Evidence Confidence**: High (1.00), Medium (0.75), or Low (0.50). Corroborated when multiple distinct sources agree.
 
-### 4. Interactive HTML Export
-- Click **Export Standalone HTML Report** to generate a single-file, zero-dependency HTML report suitable for archiving, staff ticket logs, or automated second-stage AI analysis.
+### 2.3 Bytecode & Static Analysis
+Review decompiled structural findings:
+- Invoked APIs (`java/awt/Robot`, `glfwSetCursorPos`, `sendPacket`).
+- Mixin targets hooking into Minecraft rendering or player movement.
+- Known cheat strings or package signatures detected in memory.
+
+### 2.4 Historical Traces
+- **Prefetch Entries**: View execution counts, first/last execution timestamps, and loaded DLL modules.
+- **Recycle Bin Artifacts**: Inspect deleted files recovered from `$I`/`$R` pairs, including deletion timestamps and original filenames.
+- **BAM / DAM**: Review registry execution timestamps with translated DOS drive letters.
+- **USB Storage History**: Review connected flash drives correlated with `setupapi.dev.log` device connection timestamps.
+
+---
+
+## 3. Rendering a Defensible Verdict
+
+Staff must evaluate evidence according to the server's published policy:
+
+| Finding Scenario | Policy Standard | Recommended Staff Action |
+| :--- | :--- | :--- |
+| **Hacked Client in Downloads** | `PROHIBITED_POSSESSION` | Confirmed violation under possession rules. |
+| **Hacked Client in Downloads** | `PROHIBITED_EXECUTION` | Not a violation unless Prefetch / BAM confirms execution. |
+| **Modified / Repackaged Mod** | `NEEDS_REVIEW` | Inspect bytecode capabilities tab; verify if modifications are harmless performance optimizations or disguised cheats. |
+| **Deleted Cheat in Recycle Bin** | `PROHIBITED_POSSESSION` | Confirmed possession; note deletion timestamp relative to match start time. |
+| **Unsigned DLL Mapped into Java** | `PROHIBITED_EXECUTION` | Critical indicator of active injection or hook. |
+| **Walksy Crystal Optimizer in Mods** | `PROHIBITED` in Crystal PvP | Rule violation under competitive rulesets; not classified as malware or stealth client. |
+
+---
+
+## 4. Exporting Summaries & Archival Records
+
+To attach evidence to ban appeals, ticket systems, or tournament logs:
+- Click **Export HTML Report** to save a self-contained, offline-viewable summary with searchable tables.
+- Click **Export CSV Report** to generate RFC-4180 compliant tabular records for spreadsheets.
+- Click **Export AI Markdown** to generate a structured text document optimized for automated second-stage LLM review.

@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json.Serialization;
 using MinecraftSsForensics.Scanner.Collectors;
 using MinecraftSsForensics.Scanner.Correlation;
+using MinecraftSsForensics.Scanner.Graph;
+using MinecraftSsForensics.Scanner.Observations;
 
 namespace MinecraftSsForensics.Scanner.Models;
 
@@ -97,6 +100,15 @@ public class StandaloneReport
 
     // 26. Final investigation summary
     public InvestigationVerdict Verdict { get; set; } = new();
+
+    // 27. Directed Attributed Evidence Graph (Serialized and protected under SHA256-CANONICAL-V2 integrity seal)
+    public EvidenceGraph? EvidenceGraph { get; set; }
+
+    [JsonIgnore]
+    public List<IObservation> RawObservations { get; set; } = new();
+
+    [JsonIgnore]
+    public List<CollectionOutcome> CollectionOutcomes { get; set; } = new();
 
     /// <summary>
     /// Recalculates and enforces mathematical internal consistency between checks, findings, and summaries.
@@ -228,22 +240,36 @@ public class ProcessTelemetryItem
     public int ProcessId { get; set; }
     public string ProcessName { get; set; } = string.Empty;
     public string? ExecutablePath { get; set; }
+    public string? ImageSha256 { get; set; }
+    public string? ProcessInstanceId { get; set; }
     public int? ParentProcessId { get; set; }
     public string? ParentProcessName { get; set; }
     public string? SanitizedCommandLine { get; set; }
     public DateTimeOffset? StartTime { get; set; }
+    public DateTimeOffset CollectionTimeUtc { get; set; } = DateTimeOffset.UtcNow;
+    public bool HasStartTime => StartTime.HasValue;
+    public ModuleEnumerationStatus ModuleStatus { get; set; } = ModuleEnumerationStatus.Complete;
+    public string? ModuleStatusNote { get; set; }
+    public string? AmbiguityReason { get; set; }
 }
 
 public class LoadedModuleItem
 {
     public int ProcessId { get; set; }
+    public string? ProcessInstanceId { get; set; }
+    public string? ModuleInstanceId { get; set; }
     public string ModuleName { get; set; } = string.Empty;
     public string ModulePath { get; set; } = string.Empty;
     public string FilePath { get => ModulePath; set => ModulePath = value; }
+    public string? BaseAddressHex { get; set; }
+    public string? Sha256 { get; set; }
     public long? FileSizeBytes { get; set; }
+    public DateTimeOffset CollectionTimeUtc { get; set; } = DateTimeOffset.UtcNow;
     public bool IsInTempDirectory { get; set; }
     public bool IsRecognizedJavaNativeLibrary { get; set; }
     public string ProvenanceAssessment { get; set; } = "Normal System Module";
+    public ModuleEnumerationStatus EnumerationStatus { get; set; } = ModuleEnumerationStatus.Complete;
+    public string? EnumerationNote { get; set; }
 }
 
 public class ExecutionHistoryItem
@@ -252,9 +278,12 @@ public class ExecutionHistoryItem
     public string ApplicationName { get; set; } = string.Empty;
     public string ApplicationPath { get; set; } = string.Empty;
     public DateTimeOffset? LastExecutionTime { get; set; }
+    public DateTimeOffset CollectionTimeUtc { get; set; } = DateTimeOffset.UtcNow;
     public int? ExecutionCount { get; set; }
     public bool IsSuspiciousLocation { get; set; }
     public string Details { get; set; } = string.Empty;
+    public bool IsCorruptOrMalformed { get; set; }
+    public string? ParseFailureReason { get; set; }
 }
 
 public class RegistryEvidenceItem

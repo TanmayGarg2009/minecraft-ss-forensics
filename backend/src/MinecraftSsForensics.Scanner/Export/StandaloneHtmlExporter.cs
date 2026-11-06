@@ -5,6 +5,7 @@ using System.Net;
 using System.Text;
 using MinecraftSsForensics.Scanner.Models;
 using MinecraftSsForensics.Scanner.Policy;
+using MinecraftSsForensics.Scanner.Process;
 
 namespace MinecraftSsForensics.Scanner.Export;
 
@@ -18,6 +19,7 @@ public static class StandaloneHtmlExporter
 {
     public static string ExportToHtml(StandaloneReport report)
     {
+        report = PrivacyBoundary.CreateSanitizedCopy(report);
         report.RecomputeSummaryCounts();
 
         var sb = new StringBuilder();

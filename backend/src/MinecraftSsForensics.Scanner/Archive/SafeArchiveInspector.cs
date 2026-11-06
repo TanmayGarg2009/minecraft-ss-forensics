@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -26,6 +27,32 @@ public class SafeArchiveInspector : ISafeArchiveInspector
             metadata.ParseSuccess = false;
             metadata.ParseError = "Archive file not found.";
             return metadata;
+        }
+
+        // NTFS alternate data stream (ADS) and filesystem attribute audit
+        if (OperatingSystem.IsWindows() && File.Exists(filePath))
+        {
+            try
+            {
+                var attrs = File.GetAttributes(filePath);
+                metadata.IsHiddenFile = (attrs & FileAttributes.Hidden) != 0;
+                metadata.IsSystemFile = (attrs & FileAttributes.System) != 0;
+                if (metadata.IsHiddenFile)
+                {
+                    metadata.SuspiciousNotes.Add("File has Hidden attribute set, concealing it in standard Windows Explorer directory listings.");
+                }
+                if (metadata.IsSystemFile)
+                {
+                    metadata.SuspiciousNotes.Add("File has System attribute set, concealing it from standard user file searches.");
+                }
+            }
+            catch { }
+
+            try
+            {
+                InspectZoneIdentifier(filePath, metadata);
+            }
+            catch { }
         }
 
         try
@@ -70,8 +97,24 @@ public class SafeArchiveInspector : ISafeArchiveInspector
                     }
                 }
 
-                totalUncompressed += entry.Length;
-                totalCompressed += entry.CompressedLength;
+                try
+                {
+                    totalUncompressed = checked(totalUncompressed + Math.Max(0, entry.Length));
+                    totalCompressed = checked(totalCompressed + Math.Max(0, entry.CompressedLength));
+                }
+                catch (OverflowException)
+                {
+                    metadata.ParseSuccess = false;
+                    metadata.ParseError = "Archive exceeds total uncompressed size limit (numeric overflow detected in entry lengths).";
+                    return metadata;
+                }
+
+                if (totalUncompressed > MaxTotalUncompressedBytes)
+                {
+                    metadata.ParseSuccess = false;
+                    metadata.ParseError = $"Archive exceeds total uncompressed size limit: {totalUncompressed / (1024 * 1024)}MB > {MaxTotalUncompressedBytes / (1024 * 1024)}MB";
+                    return metadata;
+                }
             }
 
             if (totalUncompressed > MaxTotalUncompressedBytes)
@@ -376,6 +419,87 @@ public class SafeArchiveInspector : ISafeArchiveInspector
         catch (Exception ex)
         {
             metadata.SuspiciousNotes.Add($"Failed to parse mcmod.info: {ex.Message}");
+        }
+    }
+
+    public static void InspectZoneIdentifier(string filePath, ModMetadata metadata)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return;
+        }
+
+        try
+        {
+            string adsPath = $"{filePath}:Zone.Identifier";
+            if (!File.Exists(adsPath))
+            {
+                return;
+            }
+
+            string[] lines = File.ReadAllLines(adsPath);
+            string? hostUrl = null;
+            string? referrerUrl = null;
+
+            foreach (var line in lines)
+            {
+                var trimmed = line.Trim();
+                if (trimmed.StartsWith("HostUrl=", StringComparison.OrdinalIgnoreCase))
+                {
+                    hostUrl = trimmed.Substring("HostUrl=".Length).Trim();
+                }
+                else if (trimmed.StartsWith("ReferrerUrl=", StringComparison.OrdinalIgnoreCase))
+                {
+                    referrerUrl = trimmed.Substring("ReferrerUrl=".Length).Trim();
+                }
+            }
+
+            string? primaryUrl = !string.IsNullOrEmpty(hostUrl) ? hostUrl : referrerUrl;
+            if (!string.IsNullOrEmpty(primaryUrl))
+            {
+                metadata.DownloadSourceUrl = primaryUrl;
+
+                if (Uri.TryCreate(primaryUrl, UriKind.Absolute, out var uri))
+                {
+                    metadata.DownloadSourceDomain = uri.Host;
+                    string host = uri.Host.ToLowerInvariant();
+
+                    if (host.Contains("modrinth.com"))
+                    {
+                        metadata.DownloadSourceCategory = "Modrinth (Verified Mod Platform)";
+                    }
+                    else if (host.Contains("curseforge.com") || host.Contains("forgecdn.net"))
+                    {
+                        metadata.DownloadSourceCategory = "CurseForge (Verified Mod Platform)";
+                    }
+                    else if (host.Contains("github.com") || host.Contains("githubusercontent.com"))
+                    {
+                        metadata.DownloadSourceCategory = "GitHub (Source Repository)";
+                    }
+                    else if (host.Contains("discordapp.com") || host.Contains("discord.gg") || host.Contains("discord.com"))
+                    {
+                        metadata.DownloadSourceCategory = "Discord (Unverified Chat Attachment)";
+                        metadata.SuspiciousNotes.Add($"Mod was downloaded directly from Discord attachment: {uri.Host}");
+                    }
+                    else if (host.Contains("mediafire.com") || host.Contains("mega.nz") || host.Contains("mega.io") || host.Contains("anonfiles.com"))
+                    {
+                        metadata.DownloadSourceCategory = "File Sharing Host (Unverified)";
+                        metadata.SuspiciousNotes.Add($"Mod was downloaded from generic file locker: {uri.Host}");
+                    }
+                    else
+                    {
+                        metadata.DownloadSourceCategory = "External Web Host";
+                    }
+                }
+                else
+                {
+                    metadata.DownloadSourceCategory = "Unknown URL Format";
+                }
+            }
+        }
+        catch
+        {
+            // Best-effort ADS inspection; ignore filesystem or permission errors
         }
     }
 }

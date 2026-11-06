@@ -21,6 +21,8 @@ public class ReportIntegrityResult
     public bool IsTampered => !IsValid && !string.IsNullOrEmpty(EmbeddedDigest);
     public string EvidenceIntegrityScope { get; set; } = "Full Payload: Covers all evidence collections, findings, classifications, timestamps, mods, and policy decisions.";
     public string ProvenanceNotice { get; set; } = "Cryptographic hash integrity confirms that report contents match the recorded digest. It does not authenticate the author's identity without an asymmetric digital signature.";
+    public bool HasGraphData { get; set; } = true;
+    public string GraphProvenanceStatus { get; set; } = "GraphVerified";
 }
 
 /// <summary>
@@ -113,6 +115,11 @@ public static class ReportIntegrityValidator
             Encoding.UTF8.GetBytes(expected)
         );
 
+        bool hasGraph = report.EvidenceGraph != null && report.EvidenceGraph.IsCaptured;
+        string graphStatus = hasGraph
+            ? (report.EvidenceGraph!.IsValid ? "GraphVerified" : "GraphStructuralValidationFailed")
+            : "HistoricalReportWithoutGraphData_UnverifiedGraphProvenance";
+
         if (isValid)
         {
             return new ReportIntegrityResult
@@ -120,7 +127,9 @@ public static class ReportIntegrityValidator
                 IsValid = true,
                 StatusMessage = "Cryptographic integrity verified: All evidence payloads, findings, mods, and telemetry match the recorded canonical SHA-256 digest.",
                 ExpectedDigest = expected,
-                EmbeddedDigest = embedded
+                EmbeddedDigest = embedded,
+                HasGraphData = hasGraph,
+                GraphProvenanceStatus = graphStatus
             };
         }
 
@@ -129,7 +138,9 @@ public static class ReportIntegrityValidator
             IsValid = false,
             StatusMessage = $"Integrity mismatch! Expected canonical digest '{expected}', but report file contains '{embedded}'. Data has been modified, corrupted, or tampered with since generation.",
             ExpectedDigest = expected,
-            EmbeddedDigest = embedded
+            EmbeddedDigest = embedded,
+            HasGraphData = hasGraph,
+            GraphProvenanceStatus = graphStatus
         };
     }
 

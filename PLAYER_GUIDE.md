@@ -14,9 +14,9 @@ Welcome to the **Minecraft SS Forensics** player guide. This document explains h
 
 ## 2. Launching the Scanner
 
-You can run the scanner using either the pre-compiled executable or the verified PowerShell one-line launcher.
+You can run the scanner using the pre-compiled graphical executable, the verified PowerShell one-line launcher, or via the headless command line.
 
-### Option A: Direct Executable Launch
+### Option A: Direct Executable Launch (GUI)
 1. Download `MinecraftSsForensics.exe` from the official release page.
 2. Double-click `MinecraftSsForensics.exe` to launch.
 3. If Windows SmartScreen displays an *Unrecognized App* banner:
@@ -32,7 +32,13 @@ Open Windows PowerShell (Run as Administrator recommended for full prefetch acce
 ```
 
 > [!NOTE]
-> This command verifies the SHA-256 cryptographic hash of the downloaded binary before launching it. It never executes unverified remote code.
+> This command verifies the SHA-256 cryptographic hash of the downloaded binary before launching it. It never executes unverified remote code or uses `Invoke-Expression`.
+
+### Option C: Headless CLI Scanner
+For automated or script-driven investigations:
+```cmd
+MinecraftSsForensics.exe scan --output C:\SS_Reports --mode FULL --gamemode "Crystal PvP" --format all
+```
 
 ---
 
@@ -42,12 +48,12 @@ When the scanner opens, you will see the **Forensic Consent & Scope Gate**:
 
 1. **Review Scopes**:
    - `Filesystem Scanning`: Scans standard Minecraft folders (`.minecraft/mods`), common launchers (Prism, Lunar, Badlion), Downloads, and Recycle Bin.
-   - `Running Processes`: Checks active `javaw.exe` instances and loaded modules.
+   - `Running Processes`: Checks active `javaw.exe` instances, loaded modules, and working directories.
    - `Historical Execution`: Audits Windows Prefetch and BAM/DAM records for execution timestamps.
    - `USB History`: Audits USB storage device connection records.
    - `Sensitive Browser Audit`: **Unchecked by default**. If enabled, scans only for specific cheat domains (`vape.gg`, `drip.gg`, etc.). General browsing history, passwords, and personal web traffic are never collected.
 2. **Select Policy Mode**:
-   - Choose the ruleset specified by your server (e.g., *Competitive PvP*, *Strict HCF*, or *Casual*).
+   - Choose the ruleset specified by your server (e.g., *Crystal PvP*, *Sword PvP*, *UHC*, or *Casual*).
 3. **Click Start Forensic Scan**.
 
 ---
@@ -61,10 +67,12 @@ Once the scan finishes:
    - **Unverified Artifacts**: Custom or modified JAR files requiring manual staff review.
    - **Correlated Violations**: Any detected prohibited cheats or macro tools.
 2. Click **Export Report**:
-   - Choose **Save Portable JSON (`.json`)** to save the raw sealed forensic payload.
-   - Choose **Save Interactive HTML (`.html`)** to generate a local self-contained browser report.
+   - **Save Portable JSON (`.json`)**: Raw sealed forensic payload.
+   - **Save Interactive HTML (`.html`)**: Self-contained browser report with interactive sorting.
+   - **Save Findings CSV (`.csv`)**: Tabular findings formatted to RFC-4180 for spreadsheets.
+   - **Save Markdown (`.md`)**: Human- and LLM-readable structured summary.
 3. Save the file to your Desktop or Documents folder.
-4. Provide the exported `.json` or `.html` file to the staff member or tournament referee via Discord or your ticket system.
+4. Provide the exported report file to the staff member or tournament referee via Discord or your ticket system.
 
 > [!TIP]
 > The exported `.json` file contains a cryptographic seal (`SHA256-CANONICAL-V2`). Do not open or modify the file in text editors, as altering any character will break the seal and flag the report as tampered.

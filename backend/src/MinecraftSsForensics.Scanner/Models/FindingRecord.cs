@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using MinecraftSsForensics.Scanner.Process;
 
 namespace MinecraftSsForensics.Scanner.Models;
@@ -14,15 +15,32 @@ public class FindingRecord
     public string RuleId { get; set; } = string.Empty;
 
     // Finding description & category
-    public string DetectionName { get; set; } = string.Empty;
-    public string FindingTitle { get; set; } = string.Empty;
-    public string Finding
+    private string _detectionName = string.Empty;
+    public string DetectionName
     {
-        get => !string.IsNullOrEmpty(FindingTitle) ? FindingTitle : DetectionName;
+        get => _detectionName;
         set
         {
-            FindingTitle = value;
-            if (string.IsNullOrEmpty(DetectionName)) DetectionName = value;
+            _detectionName = value;
+            if (string.IsNullOrEmpty(_findingTitle)) _findingTitle = value;
+        }
+    }
+
+    private string _findingTitle = string.Empty;
+    public string FindingTitle
+    {
+        get => !string.IsNullOrEmpty(_findingTitle) ? _findingTitle : _detectionName;
+        set => _findingTitle = value;
+    }
+
+    [JsonIgnore]
+    public string Finding
+    {
+        get => FindingTitle;
+        set
+        {
+            if (string.IsNullOrEmpty(_findingTitle)) FindingTitle = value;
+            if (string.IsNullOrEmpty(_detectionName)) DetectionName = value;
         }
     }
 
@@ -54,11 +72,12 @@ public class FindingRecord
         }
     }
 
-    public EvidenceStrength EvidenceStrength { get; set; } = EvidenceStrength.Moderate;
-    public ConfidenceLevel Confidence { get; set; } = ConfidenceLevel.Medium;
+    public EvidenceStrength EvidenceStrength { get; set; } = EvidenceStrength.Inconclusive;
+    public ConfidenceLevel Confidence { get; set; } = ConfidenceLevel.Low;
     public DetectionMethod DetectionMethod { get; set; } = DetectionMethod.Other;
-    public EvidenceState EvidenceState { get; set; } = EvidenceState.CONFIRMED;
+    public EvidenceState EvidenceState { get; set; } = EvidenceState.INCONCLUSIVE;
     public SoftwareEvidenceState SoftwareState { get; set; } = SoftwareEvidenceState.SoftwarePresent;
+    public ExecutionEvidenceState ExecutionState { get; set; } = ExecutionEvidenceState.FilePresent;
     public string SoftwareStateDescription { get; set; } = string.Empty;
     public string PolicyViolationScope { get; set; } = string.Empty;
 
@@ -72,7 +91,7 @@ public class FindingRecord
     // Timestamps
     public DateTimeOffset? ObservedTimestamp { get; set; }
     public DateTimeOffset? Timestamp { get => ObservedTimestamp; set => ObservedTimestamp = value; }
-    public string TimestampReliability { get; set; } = "High (Filesystem MFT / Event Timestamp)";
+    public string TimestampReliability { get; set; } = string.Empty;
     public bool IsInScanWindow { get; set; }
 
     // Process context

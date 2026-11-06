@@ -13,6 +13,8 @@ release/
 *.db-wal
 App_Data/
 evidence_storage/
+reports/
+test_reports/
 
 # Node
 node_modules/

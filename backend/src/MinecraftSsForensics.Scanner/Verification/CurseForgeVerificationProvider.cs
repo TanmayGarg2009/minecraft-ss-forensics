@@ -9,9 +9,9 @@ public class CurseForgeVerificationProvider
     private readonly string? _apiKey;
     private const string BaseUrl = "https://api.curseforge.com/v1";
 
-    public CurseForgeVerificationProvider(HttpClient? httpClient = null, string? apiKey = null)
+    public CurseForgeVerificationProvider(HttpClient? httpClient = null, string? apiKey = null, Func<bool>? isConsentGranted = null)
     {
-        _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        _httpClient = httpClient ?? NetworkBoundary.CreateConsentBoundedClient(isConsentGranted ?? (() => false));
         _apiKey = apiKey ?? Environment.GetEnvironmentVariable("CURSEFORGE_API_KEY");
 
         if (!_httpClient.DefaultRequestHeaders.Contains("User-Agent"))

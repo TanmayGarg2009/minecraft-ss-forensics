@@ -5,7 +5,7 @@
     1. Verifies .NET 8.0 SDK availability.
     2. Restores all NuGet package dependencies.
     3. Compiles the master solution in Release mode.
-    4. Executes the automated test suite (79 tests).
+    4. Executes the automated test suite (196 tests).
     5. Publishes standalone, self-contained single-file win-x64 executables.
     6. Generates SHA-256 checksum manifests.
 .PARAMETER OutputDirectory

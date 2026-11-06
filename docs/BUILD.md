@@ -22,7 +22,7 @@ $env:DOTNET_ROOT = "$env:USERPROFILE\.dotnet"; $env:PATH = "$env:DOTNET_ROOT;$en
 dotnet build backend/MinecraftSsForensics.sln -c Release
 ```
 
-### Running Automated Test Suite (79 Tests)
+### Running Automated Test Suite (196 Tests)
 ```powershell
 $env:DOTNET_ROOT = "$env:USERPROFILE\.dotnet"; $env:PATH = "$env:DOTNET_ROOT;$env:PATH"
 dotnet test backend/MinecraftSsForensics.sln -c Release --logger "console;verbosity=normal"
@@ -30,9 +30,16 @@ dotnet test backend/MinecraftSsForensics.sln -c Release --logger "console;verbos
 
 ---
 
-## 3. Publishing Standalone Single-File Binaries
+## 3. Automated Release Pipeline
+```powershell
+.\build.ps1
+```
 
-The application is engineered to compile into self-contained, single-file Windows executables that require no pre-installed .NET runtime on the player's or staff's computer.
+---
+
+## 4. Publishing Standalone Single-File Binaries
+
+The application compiles into self-contained, single-file Windows executables that require no pre-installed .NET runtime on the player's or staff's computer.
 
 ### Step 1: Publish Player Scanner (`MinecraftSsForensics.exe`)
 ```powershell

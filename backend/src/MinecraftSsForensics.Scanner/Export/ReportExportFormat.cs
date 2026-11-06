@@ -13,5 +13,15 @@ public enum ReportExportFormat
     /// <summary>
     /// Human- and AI-readable Markdown report with structured sections and an AI analysis guide.
     /// </summary>
-    Markdown
+    Markdown,
+
+    /// <summary>
+    /// Self-contained interactive HTML document for offline staff triage.
+    /// </summary>
+    Html,
+
+    /// <summary>
+    /// RFC-4180 compliant CSV export of forensic findings for tabular spreadsheet auditing.
+    /// </summary>
+    Csv
 }

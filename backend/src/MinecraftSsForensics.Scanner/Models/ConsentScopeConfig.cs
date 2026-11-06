@@ -19,7 +19,7 @@ public class ConsentScopeConfig
     public bool InspectUsbHistory { get; set; } = true;        // USBSTOR for cheat flash drives
     public bool InspectFileDiscovery { get; set; } = true;      // Search user downloads/temp/desktop for cheat EXEs/JARs
     public bool InspectServicesAndDrivers { get; set; } = true; // Non-standard services, third-party drivers, Event 7045
-    public bool PerformOnlineVerification { get; set; } = true; // Modrinth / CurseForge verification
+    public bool PerformOnlineVerification { get; set; } = false; // Modrinth / CurseForge verification (strictly opt-in by default)
 
     // SENSITIVE AUDIT CATEGORIES - Explicitly optional (default FALSE)
     /// <summary>

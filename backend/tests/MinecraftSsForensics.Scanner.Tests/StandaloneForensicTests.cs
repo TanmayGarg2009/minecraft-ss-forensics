@@ -594,13 +594,14 @@ public class StandaloneForensicTests : IDisposable
         var assessmentA = assessmentsA.First(a => a.SoftwareName == "SpeedAutoClicker");
         Assert.False(assessmentA.IsPolicyViolation); // Execution was NOT established!
 
-        // Case B: Same file, with active game process running with mod loaded in session
+        // Case B: Same file, with independent execution telemetry (Prefetch)
         var reportExecuted = new StandaloneReport();
-        reportExecuted.RunningProcesses.Add(new ProcessTelemetryItem
+        reportExecuted.ExecutionHistory.Add(new ExecutionHistoryItem
         {
-            ProcessId = 5544,
-            ProcessName = "javaw.exe",
-            SanitizedCommandLine = "-classpath C:\\Users\\Player\\AppData\\Roaming\\.minecraft\\mods\\SpeedAutoClicker.jar net.minecraft.client.main.Main"
+            ApplicationName = "SpeedAutoClicker.jar",
+            ApplicationPath = "C:\\Users\\Player\\AppData\\Roaming\\.minecraft\\mods\\SpeedAutoClicker.jar",
+            Source = "Prefetch",
+            LastExecutionTime = DateTimeOffset.UtcNow.AddMinutes(-10)
         });
         reportExecuted.ModInventory.Add(new DiscoveredModItem
         {
@@ -612,7 +613,7 @@ public class StandaloneForensicTests : IDisposable
 
         var assessmentsB = correlationEngine.Correlate(reportExecuted, policy);
         var assessmentB = assessmentsB.First(a => a.SoftwareName == "SpeedAutoClicker");
-        Assert.True(assessmentB.IsPolicyViolation); // Execution was established!
+        Assert.True(assessmentB.IsPolicyViolation); // Execution was established via Prefetch telemetry!
         Assert.Contains("VIOLATION (EXECUTION BANNED)", assessmentB.PolicyEvaluationExplanation);
     }
 

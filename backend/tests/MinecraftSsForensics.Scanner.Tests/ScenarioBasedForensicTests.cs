@@ -569,4 +569,215 @@ public class ScenarioBasedForensicTests : IDisposable
         var (sealValid, _) = ReportIntegrityValidator.VerifyReportIntegrity(report);
         Assert.True(sealValid, "Cryptographic seal must be valid for clean report.");
     }
+
+    // =========================================================================
+    // Scenario 16: Unknown modified client / unlisted mod
+    // =========================================================================
+    [Fact]
+    public void Scenario16_UnknownModifiedClient_DefaultsToPolicyReview_NotAutomaticCheat()
+    {
+        var mod = new DiscoveredModItem
+        {
+            Name = "CustomPvPClientMod",
+            FileName = "CustomPvPClientMod-1.0.jar",
+            FullPath = @"C:\Users\Player\AppData\Roaming\.minecraft\mods\CustomPvPClientMod-1.0.jar",
+            GameplayPolicy = "NEEDS_REVIEW"
+        };
+
+        var engine = new EvidenceCorrelationEngine();
+        var report = new StandaloneReport();
+        report.ModInventory.Add(mod);
+
+        var policy = new ServerGamemodePolicy { Gamemode = "Standard", PolicyName = "Default" };
+        var assessments = engine.Correlate(report, policy);
+        var assessment = assessments.FirstOrDefault(a => a.SoftwareName == "CustomPvPClientMod");
+
+        Assert.NotNull(assessment);
+        Assert.False(assessment.IsPolicyViolation, "Unlisted mod must not automatically be marked as a policy violation.");
+        Assert.Equal(SoftwareEvidenceState.SoftwareInstalled, assessment.State);
+        Assert.Contains("NEEDS REVIEW", assessment.PolicyEvaluationExplanation);
+    }
+
+    // =========================================================================
+    // Scenario 18: Macro software installed on disk without execution evidence
+    // =========================================================================
+    [Fact]
+    public void Scenario18_MacroSoftwareInstalled_WithoutExecution_EvaluatesToPossessionOnly()
+    {
+        var report = new StandaloneReport();
+
+        // AutoHotkey installer sitting in Downloads folder
+        report.FileDiscoveries.Add(new DiscoveredFileItem
+        {
+            FileName = "AutoHotkey_2.0.exe",
+            FilePath = @"C:\Users\Player\Downloads\AutoHotkey_2.0.exe",
+            FileSizeBytes = 4194304
+        });
+
+        var engine = new EvidenceCorrelationEngine();
+        var policy = new ServerGamemodePolicy { Gamemode = "Bedwars", PolicyName = "Competitive Bedwars" };
+        var assessments = engine.Correlate(report, policy);
+
+        // AutoHotkey on disk is not executing or targeting Minecraft
+        Assert.DoesNotContain(assessments, a => a.State == SoftwareEvidenceState.SoftwareInteractingWithMinecraft);
+        Assert.DoesNotContain(assessments, a => a.State == SoftwareEvidenceState.ProhibitedFunctionalityUsed);
+    }
+
+    // =========================================================================
+    // Scenario 19: Standard USB peripheral without macro evidence
+    // =========================================================================
+    [Fact]
+    public void Scenario19_UsbPeripheral_WithoutMacroEvidence_CategorizedAsBenignHardware()
+    {
+        var usbItem = new UsbDeviceItem
+        {
+            DeviceName = "Logitech G Pro Wireless Gaming Mouse",
+            SerialNumber = "USB\\VID_046D&PID_C08B",
+            MountLocation = "HID-Compliant Mouse"
+        };
+
+        var report = new StandaloneReport();
+        report.UsbEvidence.Add(usbItem);
+
+        // Ordinary gaming hardware must not create high or critical findings
+        Assert.DoesNotContain(report.Findings, f => f.Severity == Severity.High || f.Severity == Severity.Critical);
+    }
+
+    // =========================================================================
+    // Scenario 20: Legitimate software resembling suspicious behavior (OBS Hook)
+    // =========================================================================
+    [Fact]
+    public void Scenario20_ObsOverlayHook_RecognizedAsLegitimateBroadcastingUtility()
+    {
+        var obsMod = new LoadedModuleItem
+        {
+            ProcessId = 4000,
+            ModuleName = "graphics-hook64.dll",
+            FilePath = @"C:\Program Files\obs-studio\data\obs-plugins\win-capture\graphics-hook64.dll",
+            IsInTempDirectory = false,
+            ProvenanceAssessment = "Standard System Module"
+        };
+
+        var report = new StandaloneReport();
+        report.LoadedModules.Add(obsMod);
+
+        var engine = new EvidenceCorrelationEngine();
+        var policy = new ServerGamemodePolicy { Gamemode = "Ranked", PolicyName = "Ranked Rules" };
+        var assessments = engine.Correlate(report, policy);
+
+        // OBS graphics hook in standard Program Files is not flagged as an unrecognized temp DLL injection
+        Assert.DoesNotContain(assessments, a => a.SoftwareName == "graphics-hook64.dll" && a.State == SoftwareEvidenceState.SoftwareInteractingWithMinecraft);
+    }
+
+    // =========================================================================
+    // Scenario 21: Concurrent process without technical link (Forensic Principle)
+    // =========================================================================
+    [Fact]
+    public void Scenario21_ConcurrentCheatProcess_WithoutTechnicalLink_NeverFlagsMinecraftAssociation()
+    {
+        var report = new StandaloneReport();
+
+        // Active Minecraft process
+        report.RunningProcesses.Add(new ProcessTelemetryItem
+        {
+            ProcessId = 5000,
+            ParentProcessId = 1000,
+            ProcessName = "javaw.exe",
+            SanitizedCommandLine = "-Xmx4G -classpath net/minecraft/client/main/Main"
+        });
+
+        // Unassociated cheat process running concurrently under separate explorer parent
+        report.RunningProcesses.Add(new ProcessTelemetryItem
+        {
+            ProcessId = 7788,
+            ParentProcessId = 2000,
+            ProcessName = "vape.exe",
+            ExecutablePath = @"C:\Tools\vape.exe"
+        });
+
+        var engine = new EvidenceCorrelationEngine();
+        var policy = new ServerGamemodePolicy { Gamemode = "Crystal PvP", PolicyName = "Standard" };
+        var assessments = engine.Correlate(report, policy);
+
+        var vapeAssessment = assessments.FirstOrDefault(a => a.SoftwareName.Contains("Vape", StringComparison.OrdinalIgnoreCase));
+        Assert.NotNull(vapeAssessment);
+
+        // FORENSIC INVARIANT: Concurrent execution without technical link must NEVER claim active session interaction!
+        Assert.Equal(SoftwareEvidenceState.SoftwareExecuted, vapeAssessment.State);
+        Assert.NotEqual(SoftwareEvidenceState.SoftwareActiveDuringSession, vapeAssessment.State);
+        Assert.NotEqual(SoftwareEvidenceState.SoftwareInteractingWithMinecraft, vapeAssessment.State);
+
+        var finding = report.Findings.FirstOrDefault(f => f.RuleId == "PROC-CHEAT-PROCESS-RUNNING");
+        Assert.NotNull(finding);
+        Assert.Equal(EvidenceCategory.RunningProcess, finding.EvidenceCategory);
+        Assert.False(finding.IsInScanWindow);
+        Assert.Equal(FindingClassification.StrongIndicator, finding.Classification);
+        Assert.Equal(EvidenceState.STRONG_INDICATOR, finding.EvidenceState);
+    }
+
+    // =========================================================================
+    // Scenario 22: Command line mod directory presence does not prove loading
+    // =========================================================================
+    [Fact]
+    public void Scenario22_ModDirectoryCommandLinePresence_DoesNotFlagInactiveModAsLoaded()
+    {
+        var report = new StandaloneReport();
+
+        // Minecraft launched with --gameDir pointing to .minecraft
+        report.RunningProcesses.Add(new ProcessTelemetryItem
+        {
+            ProcessId = 6000,
+            ProcessName = "javaw.exe",
+            SanitizedCommandLine = @"-Xmx4G -classpath libraries/* net.minecraft.client.main.Main --gameDir C:\Users\Player\AppData\Roaming\.minecraft"
+        });
+
+        // Mod sitting in .minecraft\mods but never referenced in classpath or -javaagent
+        report.ModInventory.Add(new DiscoveredModItem
+        {
+            Name = "UnloadedMod",
+            FileName = "UnloadedMod-1.0.jar",
+            FullPath = @"C:\Users\Player\AppData\Roaming\.minecraft\mods\UnloadedMod-1.0.jar",
+            GameplayPolicy = "PERMITTED"
+        });
+
+        var engine = new EvidenceCorrelationEngine();
+        var policy = new ServerGamemodePolicy { Gamemode = "Crystal PvP", PolicyName = "Standard" };
+        var assessments = engine.Correlate(report, policy);
+
+        var modAssessment = assessments.FirstOrDefault(a => a.SoftwareName == "UnloadedMod");
+        Assert.NotNull(modAssessment);
+
+        // FORENSIC INVARIANT: Directory mention in command line must NEVER prove individual mod was loaded!
+        Assert.Equal(SoftwareEvidenceState.SoftwareInstalled, modAssessment.State);
+        Assert.NotEqual(SoftwareEvidenceState.SoftwareActiveDuringSession, modAssessment.State);
+    }
+
+    // =========================================================================
+    // Scenario 23: Required collector failure gates clean verdict to InconclusiveTelemetry (FND-002, FND-015)
+    // =========================================================================
+    [Fact]
+    public async Task Scenario23_RequiredCollectorFailed_VerdictIsGatedToInconclusiveTelemetry()
+    {
+        var scanner = new StandaloneScannerEngine();
+        var consent = new ConsentScopeConfig
+        {
+            ConsentGiven = true,
+            InspectProcessesAndModules = false, // Excludes required ProcessScanner
+            InspectServicesAndDrivers = false,
+            InspectExecutionArtifacts = false,
+            InspectRegistryArtifacts = false,
+            InspectUsbHistory = false,
+            InspectBrowserHistory = false
+        };
+
+        var report = await scanner.ExecuteScanAsync(consent);
+
+        // Required collector ProcessScanner was unavailable/excluded
+        Assert.Contains(report.CollectionOutcomes, o => o.CollectorName == "ProcessScanner" && o.Status == Observations.CollectionStatus.Unavailable);
+
+        // FORENSIC INVARIANT: Missing required telemetry can NEVER produce NoProhibitedIndicators verdict!
+        Assert.NotEqual(InvestigationVerdict.NoProhibitedIndicators, report.Verdict.OverallAssessment);
+        Assert.Equal(InvestigationVerdict.InconclusiveTelemetry, report.Verdict.OverallAssessment);
+        Assert.Contains("inconclusive", report.Verdict.Recommendation, StringComparison.OrdinalIgnoreCase);
+    }
 }

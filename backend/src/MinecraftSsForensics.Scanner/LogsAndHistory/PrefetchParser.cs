@@ -15,6 +15,8 @@ public class PrefetchParseResult
     public List<string> LoadedFilesAndModules { get; set; } = new();
     public string CompressionType { get; set; } = "None";
     public int SccaVersion { get; set; }
+    public bool IsCorrupt { get; set; }
+    public string? FailureReason { get; set; }
 }
 
 /// <summary>
@@ -66,133 +68,187 @@ public static class PrefetchParser
     public static PrefetchParseResult ParsePrefetchBytes(byte[] bytes)
     {
         var result = new PrefetchParseResult();
-        if (bytes == null || bytes.Length < 16) return result;
-
-        byte[] sccaBytes;
-        uint headerMagic = BitConverter.ToUInt32(bytes, 0);
-
-        if (headerMagic == MAM_MAGIC)
+        if (bytes == null || bytes.Length < 16)
         {
-            result.CompressionType = "MAM (XPRESS_HUFF)";
-            if (bytes.Length < 8) return result;
+            result.Success = false;
+            result.IsCorrupt = true;
+            result.FailureReason = "Prefetch file payload is truncated or invalid (< 16 bytes).";
+            return result;
+        }
 
-            int uncompressedSize = BitConverter.ToInt32(bytes, 4);
-            if (uncompressedSize <= 0 || uncompressedSize > 10 * 1024 * 1024) return result; // Sanity limit: 10MB
+        try
+        {
+            byte[] sccaBytes;
+            uint headerMagic = BitConverter.ToUInt32(bytes, 0);
 
-            if (!OperatingSystem.IsWindows())
+            if (headerMagic == MAM_MAGIC)
             {
-                // Decompression via ntdll requires Windows OS
+                result.CompressionType = "MAM (XPRESS_HUFF)";
+                if (bytes.Length < 8)
+                {
+                    result.Success = false;
+                    result.IsCorrupt = true;
+                    result.FailureReason = "Truncated MAM header.";
+                    return result;
+                }
+
+                int uncompressedSize = BitConverter.ToInt32(bytes, 4);
+                if (uncompressedSize <= 0 || uncompressedSize > 10 * 1024 * 1024) // Sanity limit: 10MB
+                {
+                    result.Success = false;
+                    result.IsCorrupt = true;
+                    result.FailureReason = $"Invalid uncompressed size ({uncompressedSize} bytes) in MAM header.";
+                    return result;
+                }
+
+                if (!OperatingSystem.IsWindows())
+                {
+                    result.Success = false;
+                    result.FailureReason = "Decompression via ntdll requires Windows OS.";
+                    return result;
+                }
+
+                sccaBytes = new byte[uncompressedSize];
+                byte[] compressedPayload = new byte[bytes.Length - 8];
+                Buffer.BlockCopy(bytes, 8, compressedPayload, 0, compressedPayload.Length);
+
+                int status = RtlDecompressBufferEx(
+                    COMPRESSION_FORMAT_XPRESS_HUFF,
+                    sccaBytes,
+                    uncompressedSize,
+                    compressedPayload,
+                    compressedPayload.Length,
+                    out int finalSize,
+                    IntPtr.Zero);
+
+                if (status != 0 || finalSize <= 0)
+                {
+                    result.Success = false;
+                    result.IsCorrupt = true;
+                    result.FailureReason = $"MAM decompression failed with NTSTATUS 0x{status:X8}.";
+                    return result;
+                }
+            }
+            else
+            {
+                result.CompressionType = "Uncompressed";
+                sccaBytes = bytes;
+            }
+
+            if (sccaBytes.Length < 84)
+            {
+                result.Success = false;
+                result.IsCorrupt = true;
+                result.FailureReason = "Decompressed payload too small for SCCA header (< 84 bytes).";
                 return result;
             }
 
-            sccaBytes = new byte[uncompressedSize];
-            byte[] compressedPayload = new byte[bytes.Length - 8];
-            Buffer.BlockCopy(bytes, 8, compressedPayload, 0, compressedPayload.Length);
+            // Verify SCCA header
+            int sccaVersion = BitConverter.ToInt32(sccaBytes, 0);
+            uint sccaSig = BitConverter.ToUInt32(sccaBytes, 4);
 
-            int status = RtlDecompressBufferEx(
-                COMPRESSION_FORMAT_XPRESS_HUFF,
-                sccaBytes,
-                uncompressedSize,
-                compressedPayload,
-                compressedPayload.Length,
-                out int finalSize,
-                IntPtr.Zero);
-
-            if (status != 0 || finalSize <= 0)
+            if (sccaSig != SCCA_MAGIC)
             {
-                return result; // Decompression failed
+                result.Success = false;
+                result.IsCorrupt = true;
+                result.FailureReason = "Invalid SCCA magic signature; not a valid Windows Prefetch file.";
+                return result;
             }
-        }
-        else
-        {
-            result.CompressionType = "Uncompressed";
-            sccaBytes = bytes;
-        }
 
-        if (sccaBytes.Length < 84) return result;
+            result.SccaVersion = sccaVersion;
 
-        // Verify SCCA header
-        int sccaVersion = BitConverter.ToInt32(sccaBytes, 0);
-        uint sccaSig = BitConverter.ToUInt32(sccaBytes, 4);
-
-        if (sccaSig != SCCA_MAGIC) return result;
-
-        result.SccaVersion = sccaVersion;
-        result.Success = true;
-
-        // Parse Executable Name at offset 16 (0x10) - 60 bytes (30 UTF-16 chars)
-        if (sccaBytes.Length >= 76)
-        {
-            string exeName = Encoding.Unicode.GetString(sccaBytes, 16, 60).TrimEnd('\0');
-            int nullIdx = exeName.IndexOf('\0');
-            if (nullIdx >= 0) exeName = exeName[..nullIdx];
-            result.ExecutableName = exeName;
-        }
-
-        // Parse Execution Timestamps and Run Counter based on Windows version
-        if (sccaVersion == 30 && sccaBytes.Length >= 212) // Windows 10 & 11
-        {
-            // Run count is at offset 208 (0xD0)
-            result.RunCount = BitConverter.ToInt32(sccaBytes, 208);
-
-            // Up to 8 execution timestamps at offset 120 (0x78)
-            for (int i = 0; i < 8; i++)
+            // Supported SCCA versions: 17 (XP), 23 (Win7), 26 (Win8/8.1), 30 (Win10/11), 31 (Win11 24H2)
+            if (sccaVersion != 17 && sccaVersion != 23 && sccaVersion != 26 && sccaVersion != 30 && sccaVersion != 31)
             {
-                int tsOffset = 120 + (i * 8);
-                if (tsOffset + 8 <= sccaBytes.Length)
+                result.Success = false;
+                result.FailureReason = $"Unsupported SCCA prefetch version: {sccaVersion}.";
+                return result;
+            }
+
+            result.Success = true;
+
+            // Parse Executable Name at offset 16 (0x10) - 60 bytes (30 UTF-16 chars)
+            if (sccaBytes.Length >= 76)
+            {
+                string exeName = Encoding.Unicode.GetString(sccaBytes, 16, 60).TrimEnd('\0');
+                int nullIdx = exeName.IndexOf('\0');
+                if (nullIdx >= 0) exeName = exeName[..nullIdx];
+                result.ExecutableName = exeName;
+            }
+
+            // Parse Execution Timestamps and Run Counter based on Windows version
+            if ((sccaVersion == 30 || sccaVersion == 31) && sccaBytes.Length >= 212) // Windows 10 & 11
+            {
+                // Run count is at offset 208 (0xD0)
+                result.RunCount = BitConverter.ToInt32(sccaBytes, 208);
+
+                // Up to 8 execution timestamps at offset 120 (0x78)
+                for (int i = 0; i < 8; i++)
                 {
-                    long fileTime = BitConverter.ToInt64(sccaBytes, tsOffset);
-                    if (fileTime > 0)
+                    int tsOffset = 120 + (i * 8);
+                    if (tsOffset + 8 <= sccaBytes.Length)
                     {
-                        try
+                        long fileTime = BitConverter.ToInt64(sccaBytes, tsOffset);
+                        if (fileTime > 0)
                         {
-                            result.ExecutionTimestamps.Add(DateTimeOffset.FromFileTime(fileTime));
+                            try
+                            {
+                                result.ExecutionTimestamps.Add(DateTimeOffset.FromFileTime(fileTime));
+                            }
+                            catch { }
                         }
-                        catch { }
                     }
                 }
-            }
 
-            // Filename strings table
-            int stringsOffset = BitConverter.ToInt32(sccaBytes, 100); // 0x64
-            int stringsLength = BitConverter.ToInt32(sccaBytes, 104); // 0x68
+                // Filename strings table
+                int stringsOffset = BitConverter.ToInt32(sccaBytes, 100); // 0x64
+                int stringsLength = BitConverter.ToInt32(sccaBytes, 104); // 0x68
 
-            if (stringsOffset > 0 && stringsLength > 0 && stringsOffset + stringsLength <= sccaBytes.Length)
-            {
-                string allStrings = Encoding.Unicode.GetString(sccaBytes, stringsOffset, stringsLength);
-                string[] parts = allStrings.Split('\0', StringSplitOptions.RemoveEmptyEntries);
-                foreach (var p in parts)
+                long maxSpan = (long)stringsOffset + stringsLength;
+                if (stringsOffset > 0 && stringsLength > 0 && maxSpan <= sccaBytes.Length)
                 {
-                    if (p.Length > 2) result.LoadedFilesAndModules.Add(p);
-                }
-            }
-        }
-        else if (sccaVersion == 26 && sccaBytes.Length >= 212) // Windows 8.1
-        {
-            result.RunCount = BitConverter.ToInt32(sccaBytes, 208);
-            for (int i = 0; i < 8; i++)
-            {
-                int tsOffset = 128 + (i * 8);
-                if (tsOffset + 8 <= sccaBytes.Length)
-                {
-                    long fileTime = BitConverter.ToInt64(sccaBytes, tsOffset);
-                    if (fileTime > 0)
+                    string allStrings = Encoding.Unicode.GetString(sccaBytes, stringsOffset, stringsLength);
+                    string[] parts = allStrings.Split('\0', StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var p in parts)
                     {
-                        try { result.ExecutionTimestamps.Add(DateTimeOffset.FromFileTime(fileTime)); } catch { }
+                        if (p.Length > 2) result.LoadedFilesAndModules.Add(p);
                     }
                 }
             }
-        }
-        else if (sccaVersion == 23 && sccaBytes.Length >= 156) // Windows 7
-        {
-            result.RunCount = BitConverter.ToInt32(sccaBytes, 152);
-            long fileTime = BitConverter.ToInt64(sccaBytes, 128);
-            if (fileTime > 0)
+            else if (sccaVersion == 26 && sccaBytes.Length >= 212) // Windows 8.1
             {
-                try { result.ExecutionTimestamps.Add(DateTimeOffset.FromFileTime(fileTime)); } catch { }
+                result.RunCount = BitConverter.ToInt32(sccaBytes, 208);
+                for (int i = 0; i < 8; i++)
+                {
+                    int tsOffset = 128 + (i * 8);
+                    if (tsOffset + 8 <= sccaBytes.Length)
+                    {
+                        long fileTime = BitConverter.ToInt64(sccaBytes, tsOffset);
+                        if (fileTime > 0)
+                        {
+                            try { result.ExecutionTimestamps.Add(DateTimeOffset.FromFileTime(fileTime)); } catch { }
+                        }
+                    }
+                }
             }
-        }
+            else if ((sccaVersion == 23 || sccaVersion == 17) && sccaBytes.Length >= 156) // Windows 7 / XP
+            {
+                result.RunCount = BitConverter.ToInt32(sccaBytes, 152);
+                long fileTime = BitConverter.ToInt64(sccaBytes, 128);
+                if (fileTime > 0)
+                {
+                    try { result.ExecutionTimestamps.Add(DateTimeOffset.FromFileTime(fileTime)); } catch { }
+                }
+            }
 
-        return result;
+            return result;
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.IsCorrupt = true;
+            result.FailureReason = $"Parsing exception: {ex.Message}";
+            return result;
+        }
     }
 }

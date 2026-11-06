@@ -49,7 +49,7 @@ public partial class MainWindow : Window
             }
 
             _currentReport = result.Report;
-            DisplayReport(result.Report, filePath);
+            DisplayReport(result.Report, filePath, result.TrustState);
             TxtStatusBar.Text = $"Loaded report from: {Path.GetFileName(filePath)}";
         }
         catch (Exception ex)
@@ -58,21 +58,44 @@ public partial class MainWindow : Window
         }
     }
 
-    private void DisplayReport(StandaloneReport report, string filePath)
+    private void DisplayReport(StandaloneReport report, string filePath, ReportLoadTrustState? trustState = null)
     {
         report.RecomputeSummaryCounts();
 
-        // 1. Seal Verification
-        var (sealValid, sealMessage) = ReportIntegrityValidator.VerifyReportIntegrity(report);
-        if (sealValid)
+        // 1. Seal & Trust State Verification
+        if (trustState == ReportLoadTrustState.VerifiedCanonicalV2)
         {
-            TxtSealStatus.Text = "✔ Cryptographic Seal Verified (Authentic & Untampered)";
+            TxtSealStatus.Text = "✔ Content Integrity Verified (SHA-256 digest matches; author not authenticated)";
             TxtSealStatus.Foreground = new SolidColorBrush(Color.FromRgb(0x34, 0xD3, 0x99));
+        }
+        else if (trustState == ReportLoadTrustState.MigratedHistoricalUnverified)
+        {
+            TxtSealStatus.Text = "ℹ Migrated Historical Report (Legacy unsealed format; not cryptographically sealed)";
+            TxtSealStatus.Foreground = new SolidColorBrush(Color.FromRgb(0x60, 0xA5, 0xFA));
+        }
+        else if (trustState == ReportLoadTrustState.UnsealedHistorical || string.IsNullOrEmpty(report.ReportIntegrityHash))
+        {
+            TxtSealStatus.Text = "⚠ Report is Unsealed (No integrity hash present)";
+            TxtSealStatus.Foreground = new SolidColorBrush(Color.FromRgb(0xF5, 0x9E, 0x0B));
+        }
+        else if (trustState == ReportLoadTrustState.TamperedDigestMismatch)
+        {
+            TxtSealStatus.Text = "❌ Report Content Tampered / Digest Mismatch";
+            TxtSealStatus.Foreground = new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44));
         }
         else
         {
-            TxtSealStatus.Text = "❌ " + sealMessage;
-            TxtSealStatus.Foreground = new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44));
+            var integrityResult = ReportIntegrityValidator.VerifyReportIntegrityDetailed(report);
+            if (integrityResult.IsValid)
+            {
+                TxtSealStatus.Text = "✔ Content Integrity Verified (SHA-256 digest matches; author not authenticated)";
+                TxtSealStatus.Foreground = new SolidColorBrush(Color.FromRgb(0x34, 0xD3, 0x99));
+            }
+            else
+            {
+                TxtSealStatus.Text = "❌ " + integrityResult.StatusMessage;
+                TxtSealStatus.Foreground = new SolidColorBrush(Color.FromRgb(0xEF, 0x44, 0x44));
+            }
         }
 
         TxtReportId.Text = $"Report ID: {report.ReportId} ({report.ScanMode} SCAN)";

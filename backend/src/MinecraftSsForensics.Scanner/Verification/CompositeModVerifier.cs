@@ -12,16 +12,24 @@ public class CompositeModVerifier : IModVerifier
     private readonly CurseForgeVerificationProvider _curseForge;
     private readonly GitHubVerificationProvider _github;
 
+    /// <summary>
+    /// Strict network capability boundary flag.
+    /// When false (the default), zero outbound HTTP requests are performed by any provider.
+    /// </summary>
+    public bool AllowNetworkRequests { get; set; } = false;
+
     public CompositeModVerifier(
         IVerificationCache cache,
         ModrinthVerificationProvider modrinth,
         CurseForgeVerificationProvider curseForge,
-        GitHubVerificationProvider github)
+        GitHubVerificationProvider github,
+        bool allowNetworkRequests = false)
     {
         _cache = cache;
         _modrinth = modrinth;
         _curseForge = curseForge;
         _github = github;
+        AllowNetworkRequests = allowNetworkRequests;
     }
 
     public async Task<ModVerificationResult> VerifyModAsync(DiscoveredMod mod, CancellationToken ct = default)
@@ -43,41 +51,45 @@ public class CompositeModVerifier : IModVerifier
             return cachedResult;
         }
 
-        // 3. Try Modrinth verification (by SHA-512)
-        try
+        // If network requests are disabled by capability boundary, skip online providers entirely
+        if (AllowNetworkRequests)
         {
-            var modrinthResult = await _modrinth.VerifyByHashAsync(mod, ct);
-            if (modrinthResult != null && modrinthResult.State != ModVerificationState.VERIFICATION_UNAVAILABLE)
+            // 3. Try Modrinth verification (by SHA-512)
+            try
             {
-                _cache.Set(mod.Hashes.Sha256, modrinthResult);
-                return modrinthResult;
+                var modrinthResult = await _modrinth.VerifyByHashAsync(mod, ct);
+                if (modrinthResult != null && modrinthResult.State != ModVerificationState.VERIFICATION_UNAVAILABLE)
+                {
+                    _cache.Set(mod.Hashes.Sha256, modrinthResult);
+                    return modrinthResult;
+                }
             }
-        }
-        catch { /* Fall through to next provider */ }
+            catch { /* Fall through to next provider */ }
 
-        // 4. Try CurseForge verification (by Murmur2 fingerprint)
-        try
-        {
-            var curseResult = await _curseForge.VerifyByFingerprintAsync(mod, ct);
-            if (curseResult != null && curseResult.State != ModVerificationState.VERIFICATION_UNAVAILABLE)
+            // 4. Try CurseForge verification (by Murmur2 fingerprint)
+            try
             {
-                _cache.Set(mod.Hashes.Sha256, curseResult);
-                return curseResult;
+                var curseResult = await _curseForge.VerifyByFingerprintAsync(mod, ct);
+                if (curseResult != null && curseResult.State != ModVerificationState.VERIFICATION_UNAVAILABLE)
+                {
+                    _cache.Set(mod.Hashes.Sha256, curseResult);
+                    return curseResult;
+                }
             }
-        }
-        catch { /* Fall through to next provider */ }
+            catch { /* Fall through to next provider */ }
 
-        // 5. Try GitHub verification
-        try
-        {
-            var githubResult = await _github.VerifyKnownRepositoryAsync(mod, ct);
-            if (githubResult != null && githubResult.State != ModVerificationState.VERIFICATION_UNAVAILABLE)
+            // 5. Try GitHub verification
+            try
             {
-                _cache.Set(mod.Hashes.Sha256, githubResult);
-                return githubResult;
+                var githubResult = await _github.VerifyKnownRepositoryAsync(mod, ct);
+                if (githubResult != null && githubResult.State != ModVerificationState.VERIFICATION_UNAVAILABLE)
+                {
+                    _cache.Set(mod.Hashes.Sha256, githubResult);
+                    return githubResult;
+                }
             }
+            catch { /* Fall through */ }
         }
-        catch { /* Fall through */ }
 
         // 6. Check for internal metadata conflicts (e.g. filename claims one thing, embedded ID claims another)
         string fileNameWithoutExt = Path.GetFileNameWithoutExtension(mod.FileName).ToLowerInvariant();

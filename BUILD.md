@@ -31,7 +31,7 @@ dotnet build backend/MinecraftSsForensics.sln -c Release
 
 ## 3. Running Automated Tests
 
-The test suite contains 79 automated xUnit tests validating all forensic collectors, tamper resistance, and security controls:
+The test suite contains 196 automated xUnit tests validating all forensic collectors, tamper resistance, policy compliance, and security controls:
 
 ```powershell
 $env:DOTNET_ROOT = "$env:USERPROFILE\.dotnet"; $env:PATH = "$env:DOTNET_ROOT;$env:PATH"
@@ -41,14 +41,22 @@ dotnet test backend/MinecraftSsForensics.sln -c Release --logger "console;verbos
 
 Expected result:
 ```
-Passed! - Failed: 0, Passed: 79, Skipped: 0, Total: 79
+Passed! - Failed: 0, Passed: 196, Skipped: 0, Total: 196
 ```
 
 ---
 
-## 4. Publishing Single-File Release Binaries
+## 4. Automated Release Pipeline
 
-To produce standalone, self-contained single-file executables with zero runtime dependencies:
+Use `build.ps1` to restore, build, test, publish single-file win-x64 binaries, and generate SHA-256 manifests automatically:
+
+```powershell
+.\build.ps1
+```
+
+### Manual Publishing (Single-File Release Binaries)
+
+To manually produce standalone, self-contained single-file executables with zero runtime dependencies:
 
 ```powershell
 $env:DOTNET_ROOT = "$env:USERPROFILE\.dotnet"; $env:PATH = "$env:DOTNET_ROOT;$env:PATH"

@@ -93,9 +93,12 @@ public class EvidenceCorrelationEngineTests
         var assessment = assessments.FirstOrDefault(a => a.SoftwareName == "ExternalClicker");
 
         Assert.NotNull(assessment);
-        Assert.True(assessment.IsPolicyViolation);
-        Assert.Equal(SoftwareEvidenceState.SoftwareActiveDuringSession, assessment.State);
-        Assert.Contains("VIOLATION (EXECUTION BANNED)", assessment.PolicyEvaluationExplanation);
+        // FORENSIC INVARIANT (FND-004): Command-line reference alone does not prove execution!
+        Assert.NotEqual(SoftwareEvidenceState.SoftwareActiveDuringSession, assessment.State);
+        Assert.Equal(SoftwareEvidenceState.SoftwareInstalled, assessment.State);
+        Assert.False(assessment.IsPolicyViolation);
+        Assert.Contains("EXECUTION UNPROVEN", assessment.PolicyEvaluationExplanation);
+        Assert.NotEmpty(assessment.SupportingEvidenceIds);
     }
 
     [Fact]

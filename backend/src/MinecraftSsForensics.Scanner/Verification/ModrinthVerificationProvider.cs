@@ -8,12 +8,9 @@ public class ModrinthVerificationProvider
     private readonly HttpClient _httpClient;
     private const string BaseUrl = "https://api.modrinth.com/v2";
 
-    public ModrinthVerificationProvider(HttpClient? httpClient = null)
+    public ModrinthVerificationProvider(HttpClient? httpClient = null, Func<bool>? isConsentGranted = null)
     {
-        _httpClient = httpClient ?? new HttpClient
-        {
-            Timeout = TimeSpan.FromSeconds(10)
-        };
+        _httpClient = httpClient ?? NetworkBoundary.CreateConsentBoundedClient(isConsentGranted ?? (() => false));
         if (!_httpClient.DefaultRequestHeaders.Contains("User-Agent"))
         {
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "MinecraftSsForensics/1.0.0 (security-forensics-tool)");

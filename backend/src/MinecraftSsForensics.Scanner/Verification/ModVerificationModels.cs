@@ -45,5 +45,7 @@ public class ModVerificationResult
     public string Explanation { get; set; } = string.Empty;
     public string Limitations { get; set; } = string.Empty;
     public bool IsCached { get; set; }
+    public DateTime? CacheRetrievedAtUtc { get; set; }
+    public string? CacheProvenance { get; set; }
     public DateTime ReferenceDataTimestamp { get; set; } = DateTime.UtcNow;
 }

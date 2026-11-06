@@ -27,7 +27,7 @@ The viewer provides an intuitive multi-tab interface:
 
 ### 2.2 Finding Records & Evidence Chains
 Click any finding to inspect its multi-layer evidentiary corroboration:
-- **Rule Violated**: Policy rule triggered (e.g., `RULE-METEOR: Meteor Client`).
+- **Rule Violated**: Policy rule triggered (e.g., `RULE-METEOR: Meteor Client`, `RULE-CRYSTAL-WALKSY: Walksy Crystal Optimizer`).
 - **Software State**: Strict classification among the 8 software states:
   - `SoftwarePresent`: File located on disk or in Recycle Bin.
   - `SoftwareInstalled`: Placed in active launcher profile `mods/` folder.
@@ -62,11 +62,13 @@ Staff must evaluate evidence according to the server's published policy:
 | **Modified / Repackaged Mod** | `NEEDS_REVIEW` | Inspect bytecode capabilities tab; verify if modifications are harmless performance optimizations or disguised cheats. |
 | **Deleted Cheat in Recycle Bin** | `PROHIBITED_POSSESSION` | Confirmed possession; note deletion timestamp relative to match start time. |
 | **Unsigned DLL Mapped into Java** | `PROHIBITED_EXECUTION` | Critical indicator of active injection or hook. |
+| **Walksy Crystal Optimizer in Mods** | `PROHIBITED` in Crystal PvP | Rule violation under competitive rulesets; not classified as malware or stealth client. |
 
 ---
 
-## 4. Exporting Summaries
+## 4. Exporting Summaries & Archival Records
 
-To attach evidence to ban appeals or tournament logs:
-- Click **Export HTML Report** to save a self-contained, offline-viewable summary.
+To attach evidence to ban appeals, ticket systems, or tournament logs:
+- Click **Export HTML Report** to save a self-contained, offline-viewable summary with searchable tables.
+- Click **Export CSV Report** to generate RFC-4180 compliant tabular records for spreadsheets.
 - Click **Export AI Markdown** to generate a structured text document optimized for automated second-stage LLM review.

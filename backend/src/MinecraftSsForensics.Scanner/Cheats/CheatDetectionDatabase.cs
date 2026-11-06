@@ -157,6 +157,18 @@ public static class CheatDetectionDatabase
             Aliases = new() { "JNativeHook" },
             KnownFileNames = new() { "jnativehook*.dll" },
             Description = "Global low-level Windows keyboard/mouse hook library frequently unpacked to %TEMP% by autoclickers."
+        },
+        new CheatSignature
+        {
+            Name = "Walksy Crystal Optimizer",
+            Category = "CombatAdvantageMod",
+            Aliases = new() { "Walksy", "CrystalOptimizer", "MarlowCrystal", "KindsCrystal" },
+            KnownFileNames = new() { "crystal-optimizer*.jar", "walksy-crystal-optimizer*.jar", "walksycrystaloptimizer*.jar", "crystaloptimizer*.jar" },
+            KnownClassNames = new() { "walksy.optimizer", "me.walksy.crystaloptimizer", "walksycrystaloptimizer" },
+            KnownPackagePrefixes = new() { "me.walksy", "walksy.optimizer" },
+            KnownDomains = new() { "github.com/walksy" },
+            Description = "Open-source combat optimization modification that removes client-side crystal placement tick delays. Prohibited in competitive Crystal PvP under strict gameplay policy.",
+            DefaultClassification = FindingClassification.NeedsReview
         }
     };
 
@@ -183,12 +195,39 @@ public static class CheatDetectionDatabase
     };
 
     /// <summary>
+    /// Normalizes full-width Unicode characters (0xFF01..0xFF5E) to ASCII (0x21..0x7E)
+    /// to defeat visual homoglyph and Unicode evasion techniques used by cheat loaders.
+    /// </summary>
+    public static string NormalizeUnicodeEvasion(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return input;
+        var sb = new System.Text.StringBuilder(input.Length);
+        foreach (char c in input)
+        {
+            if (c >= 0xFF01 && c <= 0xFF5E)
+            {
+                sb.Append((char)(c - 0xFEE0));
+            }
+            else if (c == 0x3000)
+            {
+                sb.Append(' ');
+            }
+            else
+            {
+                sb.Append(c);
+            }
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// Match an archive or executable filename against known cheat signatures with strict word boundary handling.
     /// </summary>
     public static CheatSignature? MatchFileName(string fileName)
     {
         if (string.IsNullOrWhiteSpace(fileName)) return null;
-        string clean = Path.GetFileName(fileName).ToLowerInvariant();
+        string normalized = NormalizeUnicodeEvasion(fileName);
+        string clean = Path.GetFileName(normalized).ToLowerInvariant();
         string nameWithoutExt = Path.GetFileNameWithoutExtension(clean);
 
         foreach (var sig in Signatures)
@@ -224,17 +263,20 @@ public static class CheatDetectionDatabase
 
     /// <summary>
     /// Match a package name or class name against known cheat signatures.
+    /// Supports both dot-separated (Java package) and slash-separated (ZIP archive path) inputs.
     /// </summary>
     public static CheatSignature? MatchClassOrPackage(string classOrPackage)
     {
         if (string.IsNullOrWhiteSpace(classOrPackage)) return null;
+        string normalized = NormalizeUnicodeEvasion(classOrPackage);
+        string dotted = normalized.Replace('/', '.').Replace('\\', '.');
 
         foreach (var sig in Signatures)
         {
-            if (sig.KnownPackagePrefixes.Any(p => classOrPackage.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
+            if (sig.KnownPackagePrefixes.Any(p => dotted.StartsWith(p, StringComparison.OrdinalIgnoreCase) || normalized.StartsWith(p, StringComparison.OrdinalIgnoreCase)))
                 return sig;
 
-            if (sig.KnownClassNames.Any(c => classOrPackage.Contains(c, StringComparison.OrdinalIgnoreCase)))
+            if (sig.KnownClassNames.Any(c => dotted.Contains(c, StringComparison.OrdinalIgnoreCase) || normalized.Contains(c, StringComparison.OrdinalIgnoreCase)))
                 return sig;
         }
         return null;
@@ -246,7 +288,7 @@ public static class CheatDetectionDatabase
     public static string? MatchCombatBytecodeKeyword(string className)
     {
         if (string.IsNullOrWhiteSpace(className)) return null;
-        string lower = className.ToLowerInvariant();
+        string lower = NormalizeUnicodeEvasion(className).ToLowerInvariant();
 
         foreach (var kw in CombatCheatBytecodeKeywords)
         {

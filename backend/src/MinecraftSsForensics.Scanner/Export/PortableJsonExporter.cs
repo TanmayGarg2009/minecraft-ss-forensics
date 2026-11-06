@@ -4,29 +4,74 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using MinecraftSsForensics.Scanner.Integrity;
 using MinecraftSsForensics.Scanner.Models;
+using MinecraftSsForensics.Scanner.Process;
 
 namespace MinecraftSsForensics.Scanner.Export;
 
 /// <summary>
+/// Cryptographic trust classification for loaded untrusted reports.
+/// Distinguishes canonical SHA-256 integrity verification from missing seals,
+/// corrupted/tampered payloads, and resource boundary violations.
+/// </summary>
+public enum ReportLoadTrustState
+{
+    VerifiedCanonicalV2,
+    UnsealedHistorical,
+    MigratedHistoricalUnverified,
+    TamperedDigestMismatch,
+    ResourceLimitExceeded,
+    MalformedJson,
+    UnsupportedSchemaVersion
+}
+
+/// <summary>
+/// Unambiguous result contract for loading untrusted report payloads.
+/// </summary>
+public record ReportLoadResult(
+    bool Success,
+    StandaloneReport? Report,
+    ReportLoadTrustState TrustState,
+    string StatusMessage)
+{
+    public string ErrorMessage => StatusMessage;
+
+    public void Deconstruct(out bool success, out StandaloneReport? report, out string statusMessage)
+    {
+        success = Success;
+        report = Report;
+        statusMessage = StatusMessage;
+    }
+}
+
+/// <summary>
 /// Serializes and deserializes standalone forensic reports with backward-compatibility
-/// for legacy schema formats and untrusted input defenses.
+/// for legacy schema formats, strict resource limits, and untrusted input defenses.
 /// </summary>
 public static class PortableJsonExporter
 {
+    public const long MaxReportFileSizeBytes = 50 * 1024 * 1024; // 50 MB
+    public const int MaxJsonDepth = 32;
+    public const int MaxCollectionItemLimit = 25000;
+
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        PropertyNameCaseInsensitive = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        MaxDepth = MaxJsonDepth
     };
 
     public static string ExportToJson(StandaloneReport report)
     {
-        // Compute and seal integrity hash
-        report.RecomputeSummaryCounts();
-        report.ReportIntegrityHash = ReportIntegrityValidator.ComputeReportSeal(report);
+        // 1. Create deep-cloned sanitized derivative for export (non-mutating)
+        var sanitizedReport = PrivacyBoundary.CreateSanitizedCopy(report);
 
-        return JsonSerializer.Serialize(report, JsonOpts);
+        // 2. Compute and seal deterministic canonical integrity digest (SHA256-CANONICAL-V2)
+        sanitizedReport.RecomputeSummaryCounts();
+        sanitizedReport.ReportIntegrityHash = ReportIntegrityValidator.ComputeReportSeal(sanitizedReport);
+
+        return JsonSerializer.Serialize(sanitizedReport, JsonOpts);
     }
 
     public static void SaveToFile(StandaloneReport report, string filePath)
@@ -35,45 +80,98 @@ public static class PortableJsonExporter
         File.WriteAllText(filePath, json, System.Text.Encoding.UTF8);
     }
 
-    public static (bool Success, StandaloneReport? Report, string ErrorMessage) LoadFromFile(string filePath)
+    public static ReportLoadResult LoadFromFile(string filePath)
     {
         if (!File.Exists(filePath))
         {
-            return (false, null, $"Report file not found: {filePath}");
+            return new ReportLoadResult(false, null, ReportLoadTrustState.MalformedJson, $"Report file not found: {filePath}");
         }
 
         try
         {
+            var fileInfo = new FileInfo(filePath);
+            if (fileInfo.Length > MaxReportFileSizeBytes)
+            {
+                return new ReportLoadResult(false, null, ReportLoadTrustState.ResourceLimitExceeded, $"Report file exceeds maximum permitted resource limit ({MaxReportFileSizeBytes / (1024 * 1024)} MB). File size: {fileInfo.Length / (1024 * 1024)} MB.");
+            }
+
             string json = File.ReadAllText(filePath, System.Text.Encoding.UTF8);
             return LoadFromJson(json);
         }
         catch (Exception ex)
         {
-            return (false, null, $"Error reading report file: {ex.Message}");
+            return new ReportLoadResult(false, null, ReportLoadTrustState.MalformedJson, $"Error reading report file: {ex.Message}");
         }
     }
 
-    public static (bool Success, StandaloneReport? Report, string ErrorMessage) LoadFromJson(string json)
+    public static ReportLoadResult LoadFromJson(string json)
     {
         if (string.IsNullOrWhiteSpace(json))
         {
-            return (false, null, "Report content is empty.");
+            return new ReportLoadResult(false, null, ReportLoadTrustState.MalformedJson, "Report content is empty.");
+        }
+
+        if (json.Length > MaxReportFileSizeBytes)
+        {
+            return new ReportLoadResult(false, null, ReportLoadTrustState.ResourceLimitExceeded, $"Report payload exceeds maximum permitted resource limit ({MaxReportFileSizeBytes / (1024 * 1024)} MB).");
         }
 
         try
         {
-            using var doc = JsonDocument.Parse(json);
+            var docOpts = new JsonDocumentOptions
+            {
+                MaxDepth = MaxJsonDepth,
+                AllowTrailingCommas = true
+            };
+
+            using var doc = JsonDocument.Parse(json, docOpts);
             var root = doc.RootElement;
 
-            // Check if this is v2.0 StandaloneReport
-            if (root.TryGetProperty("reportId", out _) && root.TryGetProperty("schemaVersion", out var sVer))
+            // Check if this is v2.0 StandaloneReport (supports both camelCase and PascalCase)
+            bool isV2Standalone = (root.TryGetProperty("reportId", out _) || root.TryGetProperty("ReportId", out _)) &&
+                                  (root.TryGetProperty("schemaVersion", out _) || root.TryGetProperty("SchemaVersion", out _));
+
+            if (isV2Standalone)
             {
                 var report = JsonSerializer.Deserialize<StandaloneReport>(json, JsonOpts);
                 if (report == null)
-                    return (false, null, "Failed to deserialize standalone report structure.");
+                    return new ReportLoadResult(false, null, ReportLoadTrustState.MalformedJson, "Failed to deserialize standalone report structure.");
+
+                if (report.Findings.Count > MaxCollectionItemLimit)
+                {
+                    return new ReportLoadResult(false, null, ReportLoadTrustState.ResourceLimitExceeded, $"Report collection size ({report.Findings.Count} findings) exceeds maximum safe resource limit ({MaxCollectionItemLimit}).");
+                }
 
                 report.RecomputeSummaryCounts();
-                return (true, report, string.Empty);
+
+                // Validate graph structure if graph data is present
+                if (report.EvidenceGraph != null && report.EvidenceGraph.IsCaptured)
+                {
+                    report.EvidenceGraph.Validate(out _);
+                }
+
+                // Verify integrity seal if present
+                if (!string.IsNullOrEmpty(report.ReportIntegrityHash))
+                {
+                    var integrity = ReportIntegrityValidator.VerifyReportIntegrityDetailed(report);
+                    if (!integrity.IsValid)
+                    {
+                        report.DiagnosticChecks.Add(new DiagnosticCheckItem
+                        {
+                            CheckId = "CHK-INTEGRITY-FAILED",
+                            CheckName = "Report Integrity Verification",
+                            Source = "ReportIntegrityValidator",
+                            Status = CheckStatus.FLAGGED,
+                            Reason = integrity.StatusMessage
+                        });
+
+                        return new ReportLoadResult(true, report, ReportLoadTrustState.TamperedDigestMismatch, integrity.StatusMessage);
+                    }
+
+                    return new ReportLoadResult(true, report, ReportLoadTrustState.VerifiedCanonicalV2, "Content integrity verified by SHA-256 canonical digest.");
+                }
+
+                return new ReportLoadResult(true, report, ReportLoadTrustState.UnsealedHistorical, "Loaded report is valid but lacks cryptographic integrity seal.");
             }
 
             // Backward compatibility: Support v1.0 wrapped export format ({ exportMetadata: ..., report: ... })
@@ -117,8 +215,8 @@ public static class PortableJsonExporter
                 }
 
                 report.RecomputeSummaryCounts();
-                report.ReportIntegrityHash = ReportIntegrityValidator.ComputeReportSeal(report);
-                return (true, report, "Migrated legacy v1.0 report format successfully.");
+                report.ReportIntegrityHash = string.Empty;
+                return new ReportLoadResult(true, report, ReportLoadTrustState.MigratedHistoricalUnverified, "Migrated legacy v1.0 report format; historical unsealed report remained unsealed.");
             }
 
             // Backward compatibility: Support direct v1.0 root payload (SubmitReportRequest)
@@ -162,19 +260,19 @@ public static class PortableJsonExporter
                 }
 
                 report.RecomputeSummaryCounts();
-                report.ReportIntegrityHash = ReportIntegrityValidator.ComputeReportSeal(report);
-                return (true, report, "Migrated direct legacy v1.0 report payload successfully.");
+                report.ReportIntegrityHash = string.Empty;
+                return new ReportLoadResult(true, report, ReportLoadTrustState.MigratedHistoricalUnverified, "Migrated direct legacy v1.0 report payload; historical unsealed report remained unsealed.");
             }
 
-            return (false, null, "Unrecognized report format or incompatible schema version.");
+            return new ReportLoadResult(false, null, ReportLoadTrustState.UnsupportedSchemaVersion, "Unrecognized report format or incompatible schema version.");
         }
         catch (JsonException ex)
         {
-            return (false, null, $"Malformed JSON payload: {ex.Message}");
+            return new ReportLoadResult(false, null, ReportLoadTrustState.MalformedJson, $"Malformed JSON payload: {ex.Message}");
         }
         catch (Exception ex)
         {
-            return (false, null, $"Report loading failed: {ex.Message}");
+            return new ReportLoadResult(false, null, ReportLoadTrustState.MalformedJson, $"Report loading failed: {ex.Message}");
         }
     }
 }

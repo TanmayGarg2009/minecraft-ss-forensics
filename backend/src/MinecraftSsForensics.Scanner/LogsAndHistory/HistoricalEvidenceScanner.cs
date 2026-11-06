@@ -15,10 +15,13 @@ public class HistoricalArtifactRecord
     public string Path { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public DateTime? Timestamp { get; set; }
+    public DateTimeOffset CollectionTimeUtc { get; set; } = DateTimeOffset.UtcNow;
     public int? RunCount { get; set; }
     public bool IsDeletedIndicator { get; set; }
     public bool HasAccessDenied { get; set; }
     public string? LimitationNote { get; set; }
+    public bool IsCorruptOrMalformed { get; set; }
+    public string? ParseFailureReason { get; set; }
 }
 
 /// <summary>
@@ -166,45 +169,60 @@ public class HistoricalEvidenceScanner
                         // Parse MAM compressed or uncompressed prefetch header
                         var parsed = PrefetchParser.ParsePrefetchFile(pf.FullName);
 
-                        DateTime timestamp = pf.LastWriteTimeUtc;
-                        if (parsed.Success && parsed.ExecutionTimestamps.Count > 0)
+                        if (parsed.Success)
                         {
-                            timestamp = parsed.ExecutionTimestamps[0].UtcDateTime;
-                        }
+                            DateTime? timestamp = parsed.ExecutionTimestamps.Count > 0
+                                ? parsed.ExecutionTimestamps[0].UtcDateTime
+                                : null;
 
-                        string desc;
-                        if (cheatMatch != null)
-                        {
-                            desc = $"Prefetch execution matching cheat '{cheatMatch.Name}' (Run Count: {parsed.RunCount}, Compression: {parsed.CompressionType})";
+                            string desc;
+                            if (cheatMatch != null)
+                            {
+                                desc = $"Prefetch execution matching cheat '{cheatMatch.Name}' (Run Count: {parsed.RunCount}, Compression: {parsed.CompressionType})";
+                            }
+                            else
+                            {
+                                desc = $"Prefetch execution record: {pf.Name} (Run Count: {parsed.RunCount})";
+                            }
+
+                            // Inspect referenced modules for injected hooks
+                            if (parsed.LoadedFilesAndModules.Count > 0)
+                            {
+                                var suspiciousRef = parsed.LoadedFilesAndModules.FirstOrDefault(m =>
+                                    m.Contains("vape", StringComparison.OrdinalIgnoreCase) ||
+                                    m.Contains("slinky", StringComparison.OrdinalIgnoreCase) ||
+                                    m.Contains("doomsday", StringComparison.OrdinalIgnoreCase));
+
+                                if (suspiciousRef != null)
+                                {
+                                    desc += $" • References suspicious module: {suspiciousRef}";
+                                }
+                            }
+
+                            records.Add(new HistoricalArtifactRecord
+                            {
+                                Source = "Prefetch",
+                                Path = pf.FullName,
+                                Description = desc,
+                                Timestamp = timestamp,
+                                RunCount = parsed.RunCount,
+                                IsDeletedIndicator = false
+                            });
                         }
                         else
                         {
-                            desc = $"Prefetch execution record: {pf.Name} (Run Count: {parsed.RunCount})";
-                        }
-
-                        // Inspect referenced modules for injected hooks
-                        if (parsed.LoadedFilesAndModules.Count > 0)
-                        {
-                            var suspiciousRef = parsed.LoadedFilesAndModules.FirstOrDefault(m =>
-                                m.Contains("vape", StringComparison.OrdinalIgnoreCase) ||
-                                m.Contains("slinky", StringComparison.OrdinalIgnoreCase) ||
-                                m.Contains("doomsday", StringComparison.OrdinalIgnoreCase));
-
-                            if (suspiciousRef != null)
+                            records.Add(new HistoricalArtifactRecord
                             {
-                                desc += $" • References suspicious module: {suspiciousRef}";
-                            }
+                                Source = "Prefetch",
+                                Path = pf.FullName,
+                                Description = $"Malformed or corrupted Prefetch record: {pf.Name} ({parsed.FailureReason ?? "Failed to parse header"})",
+                                Timestamp = null, // Do NOT fabricate an execution timestamp
+                                RunCount = null,
+                                IsCorruptOrMalformed = true,
+                                ParseFailureReason = parsed.FailureReason ?? "Failed to parse prefetch header",
+                                IsDeletedIndicator = false
+                            });
                         }
-
-                        records.Add(new HistoricalArtifactRecord
-                        {
-                            Source = "Prefetch",
-                            Path = pf.FullName,
-                            Description = desc,
-                            Timestamp = timestamp,
-                            RunCount = parsed.Success ? parsed.RunCount : null,
-                            IsDeletedIndicator = false
-                        });
                     }
                 }
             }

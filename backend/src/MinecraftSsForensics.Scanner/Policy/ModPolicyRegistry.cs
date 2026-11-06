@@ -464,6 +464,19 @@ public class ModPolicyRegistry
             Aliases = new() { "appleskin" }
         });
 
+        // Walksy Crystal Optimizer is strictly PROHIBITED in Crystal PvP
+        policy.Rules.Add(new ModPolicyRule
+        {
+            RuleId = "RULE-CRYSTAL-WALKSY",
+            ModName = "Walksy Crystal Optimizer",
+            Policy = GameplayPolicy.PROHIBITED,
+            Behavior = BehaviorCategory.AutomatedCombatActions,
+            PolicyReason = "Removes client-side crystal placement tick throttling, providing automated rapid crystal placement advantage.",
+            ProjectIds = new() { "walksy-crystal-optimizer", "walksycrystaloptimizer" },
+            ModIds = new() { "walksyoptimizer", "walksycrystaloptimizer", "marlowcrystal", "kindscrystal" },
+            Aliases = new() { "walksy", "walksyoptimizer", "walksycrystaloptimizer", "crystaloptimizer" }
+        });
+
         return policy;
     }
 

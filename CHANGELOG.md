@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [2.2.0] - 2026-11-06
+
+### Headless CLI Mode, Deep Memory Audits, Provenance & Expanded Test Suite
+This release introduces headless CLI scanning, remote PEB working directory resolution, reflective PE injection memory scanning, NTFS Zone.Identifier provenance parsing, concealed file attribute detection, Unicode evasion normalization, RFC-4180 CSV export, and expands automated test coverage to 196 tests (100% pass rate).
+
+#### 1. Headless CLI Scanning & Dual-Mode Executable
+- **Headless CLI Execution**: Added non-interactive command-line mode (`MinecraftSsForensics.exe scan`) with options for `--output <dir>`, `--mode <QUICK|FULL>`, `--gamemode <name>`, `--dir <path>`, and `--format <json|html|csv|markdown|all>`.
+- **RFC-4180 CSV Findings Export**: Created `CsvExporter` generating 20 standardized forensic columns for spreadsheet analysis and automated tournament pipelines.
+- **Parent Console Attachment**: Dynamic Win32 `AttachConsole` / `AllocConsole` integration allowing smooth stdout logging in calling terminal shells without flashing GUI windows.
+
+#### 2. Advanced Process & Memory Forensics
+- **Remote PEB CWD Resolution**: Reads `PEB.ProcessParameters.CurrentDirectory` via `NtQueryInformationProcess` to determine exact process working directories.
+- **Reflective PE Injection Memory Detection**: Implemented `VirtualQueryEx` scanning for unbacked private executable memory pages (`MEM_COMMIT | MEM_PRIVATE | PAGE_EXECUTE_READWRITE`), verifying DOS `MZ` headers to eliminate HotSpot JVM JIT compilation false positives.
+
+#### 3. Provenance & Evasion Defenses
+- **NTFS Alternate Data Stream (`:Zone.Identifier`)**: Extracts download origin metadata (`HostUrl`, `ReferrerUrl`, `ZoneId`) to verify mod distribution platforms (Modrinth, CurseForge, Discord, GitHub, or file lockers).
+- **Concealed File Attribute Detection**: Discovers and flags executable/archive artifacts in user staging directories marked with `Hidden` or `System` attributes.
+- **Full-Width Unicode Normalization**: Normalizes full-width Unicode characters (`0xFF01..0xFF5E`) to standard ASCII to defeat visual string evasion in cheat filenames, packages, and bytecode.
+- **Walksy Crystal Optimizer Policy Support**: Added `RULE-CRYSTAL-WALKSY` under Crystal PvP policy, enforcing anti-tick-throttling rules while maintaining strict forensic distinction between competitive rule violations and malicious injectors.
+
+#### 4. Verification & Hardening
+- **196 Automated Tests**: Expanded xUnit test suite with 100% passing rate (0 failures, 0 skipped), verifying PEB resolution fallbacks, Zone.Identifier parsing, Unicode normalization, CSV escaping, and policy rules.
+
+---
+
 ## [2.1.0] - 2026-10-30
 
 ### Complete Remediation, Production Hardening & Feature Completion
