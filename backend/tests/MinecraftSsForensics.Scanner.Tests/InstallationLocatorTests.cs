@@ -47,20 +47,20 @@ public class InstallationLocatorTests : IDisposable
     }
 
     [Theory]
-    [InlineData("PrismLauncher", "Crystal-1", "instance.cfg", "name=Crystal PvP\n" )]
-    [InlineData("MultiMC", "Combat-2", "instance.cfg", "name=Combat\n")]
-    public void DiscoverInstallations_UsesPrismAndMultiMcInstanceMetadata(string launcher, string instanceFolder, string metadataName, string metadata)
+    [InlineData("PrismLauncher", "Prism Launcher", "Crystal-1", "instance.cfg", "name=Crystal PvP\n", "Crystal PvP")]
+    [InlineData("MultiMC", "MultiMC", "Combat-2", "instance.cfg", "name=Combat\n", "Combat")]
+    public void DiscoverInstallations_UsesPrismAndMultiMcInstanceMetadata(string launcherFolder, string launcherName, string instanceFolder, string metadataName, string metadata, string expectedName)
     {
-        string root = Path.Combine(_appData, launcher, "instances", instanceFolder);
+        string root = Path.Combine(_appData, launcherFolder == "Prism Launcher" ? "PrismLauncher" : launcherFolder, "instances", instanceFolder);
         string game = Path.Combine(root, ".minecraft");
         Directory.CreateDirectory(Path.Combine(game, "mods"));
         File.WriteAllText(Path.Combine(root, metadataName), metadata);
         File.WriteAllText(Path.Combine(root, "mmc-pack.json"), """{"components":[{"uid":"net.minecraft","version":"1.20.4"},{"uid":"net.fabricmc.fabric-loader","version":"0.15.0"}]}""");
 
         var instance = Assert.Single(new InstallationLocator(_appData, _localAppData, _userProfile)
-            .DiscoverInstallations().Where(x => x.LauncherType == launcher));
+            .DiscoverInstallations().Where(x => x.LauncherType == launcherName));
 
-        Assert.Equal("Crystal PvP", instance.Name is "Crystal PvP" ? instance.Name : launcher == "MultiMC" ? "Combat" : instance.Name);
+        Assert.Equal(expectedName, instance.Name);
         Assert.Equal(game, instance.GameDirectory);
         Assert.Equal(Path.Combine(game, "mods"), instance.ModsPath);
         Assert.Equal("1.20.4", instance.GameVersion);

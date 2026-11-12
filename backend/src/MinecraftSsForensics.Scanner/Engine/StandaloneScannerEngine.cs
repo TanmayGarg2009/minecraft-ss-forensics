@@ -1339,18 +1339,18 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
             report.Verdict.Recommendation = "Identified suspicious runtime processes or unverified memory modules executing during scan. Human staff review required.";
             report.Verdict.KeyTakeaways.Add("Runtime observations require verification of module provenance and active process behavior.");
         }
+        else if (hasUnavailableRequiredTelemetry)
+        {
+            report.Verdict.OverallAssessment = InvestigationVerdict.InconclusiveTelemetry;
+            report.Verdict.Recommendation = "Critical forensic telemetry was restricted, incomplete, skipped, or inaccessible in current scan context. Investigation is inconclusive; disk/history observations remain independently reportable.";
+            report.Verdict.KeyTakeaways.Add("One or more required collectors did not complete; findings in this report do not represent full requested coverage.");
+        }
         else if (hasProhibitedArtifactDiskOrHistory)
         {
             report.Verdict.OverallAssessment = InvestigationVerdict.ProhibitedArtifactNotActive;
             report.Verdict.Recommendation = "Prohibited software artifact or historical execution trace identified on system. No active runtime association with Minecraft was observed during this scan.";
             report.Verdict.KeyTakeaways.Add("Confirmed file on disk or historical execution artifact; no proof of runtime activity in the inspected Minecraft session.");
             report.Verdict.UnansweredQuestions.Add("Did the player use this software during earlier unmonitored matches or outside this server?");
-        }
-        else if (hasUnavailableRequiredTelemetry)
-        {
-            report.Verdict.OverallAssessment = InvestigationVerdict.InconclusiveTelemetry;
-            report.Verdict.Recommendation = "Critical forensic telemetry was restricted or inaccessible in current scan context. Investigation is inconclusive.";
-            report.Verdict.KeyTakeaways.Add("One or more required diagnostic collectors could not access system telemetry.");
         }
         else
         {
