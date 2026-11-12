@@ -51,7 +51,7 @@ public class InstallationLocatorTests : IDisposable
     [InlineData("MultiMC", "MultiMC", "Combat-2", "instance.cfg", "name=Combat\n", "Combat")]
     public void DiscoverInstallations_UsesPrismAndMultiMcInstanceMetadata(string launcherFolder, string launcherName, string instanceFolder, string metadataName, string metadata, string expectedName)
     {
-        string root = Path.Combine(_appData, launcherFolder == "Prism Launcher" ? "PrismLauncher" : launcherFolder, "instances", instanceFolder);
+        string root = Path.Combine(_appData, launcherFolder, "instances", instanceFolder);
         string game = Path.Combine(root, ".minecraft");
         Directory.CreateDirectory(Path.Combine(game, "mods"));
         File.WriteAllText(Path.Combine(root, metadataName), metadata);
@@ -64,6 +64,7 @@ public class InstallationLocatorTests : IDisposable
         Assert.Equal(game, instance.GameDirectory);
         Assert.Equal(Path.Combine(game, "mods"), instance.ModsPath);
         Assert.Equal("1.20.4", instance.GameVersion);
+        Assert.Equal("Fabric", instance.Loader);
         Assert.Equal("0.15.0", instance.LoaderVersion);
         Assert.True(instance.IsAccessible);
     }

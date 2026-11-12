@@ -1333,17 +1333,17 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
             report.Verdict.Recommendation = "Confirmed prohibited cheat artifact with direct runtime association to the Minecraft process. Immediate review required.";
             report.Verdict.KeyTakeaways.Add("Verified technical connection (Java agent, memory module, or active session loading) between cheat software and Minecraft.");
         }
-        else if (hasSuspiciousRuntime)
-        {
-            report.Verdict.OverallAssessment = InvestigationVerdict.SuspiciousRuntimeReview;
-            report.Verdict.Recommendation = "Identified suspicious runtime processes or unverified memory modules executing during scan. Human staff review required.";
-            report.Verdict.KeyTakeaways.Add("Runtime observations require verification of module provenance and active process behavior.");
-        }
         else if (hasUnavailableRequiredTelemetry)
         {
             report.Verdict.OverallAssessment = InvestigationVerdict.InconclusiveTelemetry;
             report.Verdict.Recommendation = "Critical forensic telemetry was restricted, incomplete, skipped, or inaccessible in current scan context. Investigation is inconclusive; disk/history observations remain independently reportable.";
             report.Verdict.KeyTakeaways.Add("One or more required collectors did not complete; findings in this report do not represent full requested coverage.");
+        }
+        else if (hasSuspiciousRuntime)
+        {
+            report.Verdict.OverallAssessment = InvestigationVerdict.SuspiciousRuntimeReview;
+            report.Verdict.Recommendation = "Identified suspicious runtime processes or unverified memory modules executing during scan. Human staff review required.";
+            report.Verdict.KeyTakeaways.Add("Runtime observations require verification of module provenance and active process behavior.");
         }
         else if (hasProhibitedArtifactDiskOrHistory)
         {
