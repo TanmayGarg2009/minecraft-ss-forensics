@@ -19,6 +19,7 @@ public class DiscoveredProcess
     public string? RedactedCommandLine { get; set; }
     public string? CurrentWorkingDirectory { get; set; }
     public string? JavaVersion { get; set; }
+    public string? Architecture { get; set; }
     public bool IsGameProcess { get; set; }
     public bool IsLauncherProcess { get; set; }
     public bool IsCheatProcess { get; set; }
@@ -41,6 +42,7 @@ public class LoadedModuleInfo
     public long? FileSizeBytes { get; set; }
     public string? Sha256 { get; set; }
     public DateTimeOffset CollectionTimeUtc { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? LastWriteTimeUtc { get; set; }
     public bool IsSigned { get; set; }
     public bool IsTrustedSignature { get; set; }
     public string? SignerSubject { get; set; }

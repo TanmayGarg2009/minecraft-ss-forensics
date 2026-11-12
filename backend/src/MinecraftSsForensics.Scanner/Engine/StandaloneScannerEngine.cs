@@ -53,6 +53,7 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
     private readonly ServiceAndDriverScanner _serviceScanner;
     private readonly EvidenceCorrelationEngine _correlationEngine;
     private readonly ModPolicyEngine _policyEngine;
+    private readonly Func<List<DiscoveredInstallation>>? _installationDiscoveryOverride;
 
     public StandaloneScannerEngine(
         IFileHasher? hasher = null,
@@ -69,7 +70,8 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
         FileDiscoveryScanner? fileDiscoveryScanner = null,
         ServiceAndDriverScanner? serviceScanner = null,
         EvidenceCorrelationEngine? correlationEngine = null,
-        ModPolicyEngine? policyEngine = null)
+        ModPolicyEngine? policyEngine = null,
+        Func<List<DiscoveredInstallation>>? installationDiscoveryOverride = null)
     {
         _hasher = hasher ?? new StreamingFileHasher();
         _archiveInspector = archiveInspector ?? new SafeArchiveInspector();
@@ -85,6 +87,7 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
         _serviceScanner = serviceScanner ?? new ServiceAndDriverScanner();
         _policyEngine = policyEngine ?? new ModPolicyEngine();
         _correlationEngine = correlationEngine ?? new EvidenceCorrelationEngine(_policyEngine);
+        _installationDiscoveryOverride = installationDiscoveryOverride;
 
         if (verifier == null)
         {
@@ -118,6 +121,7 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
         var stopwatch = Stopwatch.StartNew();
         DateTimeOffset scanStart = DateTimeOffset.UtcNow;
         var activePolicy = policy ?? _policyEngine.Registry.GetPolicy("Crystal PvP");
+        var instanceById = new Dictionary<string, MinecraftInstallationInfo>(StringComparer.OrdinalIgnoreCase);
 
         var report = new StandaloneReport
         {
@@ -152,80 +156,84 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
         progress?.Report(update);
 
         var swInst = Stopwatch.StartNew();
-        var installations = new List<string>();
-        if (!string.IsNullOrWhiteSpace(customDirectory) && Directory.Exists(customDirectory))
+        var discoveredInstallations = _installationDiscoveryOverride != null
+            ? _installationDiscoveryOverride()
+            : _installationLocator.DiscoverInstallations(customDirectory, onlyCustomDirectory);
+        var accessibleInstallations = new List<DiscoveredInstallation>();
+        var reportedInstances = new Dictionary<string, MinecraftInstallationInfo>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var inst in discoveredInstallations)
         {
-            installations.Add(customDirectory);
-            report.MinecraftInstallations.Add(new MinecraftInstallationInfo
+            ct.ThrowIfCancellationRequested();
+            var instanceInfo = new MinecraftInstallationInfo
             {
-                Name = "Custom Specified Directory",
-                RootPath = customDirectory,
-                Exists = true,
-                LauncherType = "Custom / Profile"
-            });
+                InstanceId = inst.InstanceId,
+                Name = inst.Name,
+                LauncherType = inst.LauncherType,
+                RootPath = inst.GameDirectory,
+                ModsPath = inst.ModsPath,
+                ConfigPath = inst.ConfigPath,
+                LogsPath = inst.LogsPath,
+                GameVersion = inst.GameVersion,
+                Loader = inst.Loader,
+                LoaderVersion = inst.LoaderVersion,
+                DiscoverySource = inst.DiscoverySource,
+                DiscoveryConfidence = inst.DiscoveryConfidence,
+                Exists = inst.DirectoryExists,
+                IsAccessible = inst.IsAccessible,
+                AvailabilityNote = inst.AvailabilityNote,
+                InspectionStatus = inst.IsAccessible ? "Pending" : "Unavailable"
+            };
+            report.MinecraftInstallations.Add(instanceInfo);
+            reportedInstances[inst.InstanceId] = instanceInfo;
+            instanceById[inst.InstanceId] = instanceInfo;
 
             observations.Add(new RawObservation
             {
                 ObservationType = "InstallationObservation",
                 SourceCollector = "InstallationLocator",
                 SourceIdentity = "FileSystem_Directory",
-                Provenance = "CustomDirectoryParam",
-                TargetEntityId = $"file:{customDirectory.ToLowerInvariant()}:0:dir",
+                Provenance = inst.DiscoverySource,
+                TargetEntityId = $"instance:{inst.InstanceId}",
                 Properties = new Dictionary<string, string>
                 {
-                    ["RootPath"] = customDirectory,
-                    ["LauncherType"] = "Custom / Profile",
-                    ["Name"] = "Custom Specified Directory"
+                    ["InstanceId"] = inst.InstanceId,
+                    ["RootPath"] = inst.GameDirectory,
+                    ["ModsPath"] = inst.ModsPath,
+                    ["LauncherType"] = inst.LauncherType,
+                    ["Name"] = inst.Name,
+                    ["GameVersion"] = inst.GameVersion ?? string.Empty,
+                    ["Loader"] = inst.Loader ?? string.Empty,
+                    ["DiscoveryConfidence"] = inst.DiscoveryConfidence
                 }
             });
-        }
 
-        if (!onlyCustomDirectory)
-        {
-            var discovered = _installationLocator.DiscoverInstallations(customDirectory, onlyCustomDirectory);
-            foreach (var inst in discovered)
+            if (inst.IsAccessible)
             {
-                if ((inst.HasModsFolder || inst.HasLogsFolder || Directory.Exists(inst.RootPath)) &&
-                    !installations.Contains(inst.RootPath, StringComparer.OrdinalIgnoreCase))
-                {
-                    installations.Add(inst.RootPath);
-                    report.MinecraftInstallations.Add(new MinecraftInstallationInfo
-                    {
-                        Name = inst.Name,
-                        RootPath = inst.RootPath,
-                        Exists = true,
-                        LauncherType = inst.LauncherType
-                    });
-
-                    observations.Add(new RawObservation
-                    {
-                        ObservationType = "InstallationObservation",
-                        SourceCollector = "InstallationLocator",
-                        SourceIdentity = "FileSystem_Directory",
-                        Provenance = "LauncherDirectoryScan",
-                        TargetEntityId = $"file:{inst.RootPath.ToLowerInvariant()}:0:dir",
-                        Properties = new Dictionary<string, string>
-                        {
-                            ["RootPath"] = inst.RootPath,
-                            ["LauncherType"] = inst.LauncherType,
-                            ["Name"] = inst.Name
-                        }
-                    });
-                }
+                accessibleInstallations.Add(inst);
+                if (!Directory.Exists(inst.ModsPath))
+                    instanceInfo.AvailabilityNote = "Instance is readable; no mods directory exists at the configured launcher path.";
+            }
+            else
+            {
+                outcomes.Add(CollectionOutcome.SourceUnavailable($"Instance:{inst.InstanceId}", inst.AvailabilityNote ?? "Game directory is unavailable."));
+                report.TechnicalLimitations.Add($"Instance '{inst.Name}' ({inst.LauncherType}) was not inspected: {inst.AvailabilityNote ?? "directory unavailable"}");
             }
         }
+
         swInst.Stop();
-        outcomes.Add(CollectionOutcome.Succeeded("InstallationLocator", installations.Count, swInst.Elapsed));
+        outcomes.Add(CollectionOutcome.Succeeded("InstallationLocator", discoveredInstallations.Count, swInst.Elapsed,
+            new[] { $"Accessible instances: {accessibleInstallations.Count}; unavailable instances: {discoveredInstallations.Count - accessibleInstallations.Count}." }));
 
         report.DiagnosticChecks.Add(new DiagnosticCheckItem
         {
             CheckId = "CHK-INSTALLATIONS",
             CheckName = "Minecraft Client Discovery",
             Source = "InstallationLocator",
-            Status = installations.Count > 0 ? CheckStatus.PASSED : CheckStatus.FLAGGED,
-            Reason = installations.Count > 0
-                ? $"Located {installations.Count} game directory profile(s)."
-                : "No Minecraft directory was discovered automatically."
+            Status = discoveredInstallations.Count > 0 && accessibleInstallations.Count == discoveredInstallations.Count ? CheckStatus.PASSED : CheckStatus.UNAVAILABLE,
+            Reason = discoveredInstallations.Count == 0
+                ? "No Minecraft game directory was discovered in supported launcher locations."
+                : $"Located {discoveredInstallations.Count} instance(s); {accessibleInstallations.Count} accessible for inspection."
         });
 
         // 2. Discover and Inspect Mod JARs
@@ -237,37 +245,50 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
             update.PercentComplete = 25;
             progress?.Report(update);
 
-            var modJars = new List<string>();
-            foreach (var instPath in installations)
+            var modJars = new List<(string Path, DiscoveredInstallation Instance)>();
+            foreach (var inst in accessibleInstallations)
             {
-                string modsFolder = Path.Combine(instPath, "mods");
-                if (Directory.Exists(modsFolder))
+                ct.ThrowIfCancellationRequested();
+                var instanceInfo = instanceById[inst.InstanceId];
+                instanceInfo.InspectionStatus = "Scanning";
+                if (!Directory.Exists(inst.ModsPath))
                 {
-                    try
-                    {
-                        var files = Directory.GetFiles(modsFolder, "*.jar", SearchOption.TopDirectoryOnly);
-                        modJars.AddRange(files);
-                    }
-                    catch (UnauthorizedAccessException)
-                    {
-                        outcomes.Add(CollectionOutcome.AccessDenied("ModInspection", modsFolder));
-                    }
-                    catch (Exception ex)
-                    {
-                        outcomes.Add(CollectionOutcome.Failed("ModInspection", ex));
-                    }
+                    instanceInfo.InspectionStatus = "InspectedNoModsDirectory";
+                    outcomes.Add(CollectionOutcome.PartiallySucceeded($"Instance:{inst.InstanceId}", 0, TimeSpan.Zero,
+                        $"No mod directory found at the configured launcher path {inst.ModsPath}."));
+                    continue;
+                }
+
+                try
+                {
+                    var files = Directory.GetFiles(inst.ModsPath, "*.jar", SearchOption.TopDirectoryOnly);
+                    modJars.AddRange(files.Select(path => (Path: path, Instance: inst)));
+                    instanceInfo.InspectionStatus = "Inspected";
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    instanceInfo.InspectionStatus = "PermissionDenied";
+                    instanceInfo.AvailabilityNote = ex.GetType().Name;
+                    outcomes.Add(CollectionOutcome.AccessDenied($"Instance:{inst.InstanceId}:ModInspection", inst.ModsPath));
+                }
+                catch (Exception ex) when (ex is IOException or System.Security.SecurityException)
+                {
+                    instanceInfo.InspectionStatus = "Error";
+                    instanceInfo.AvailabilityNote = ex.GetType().Name;
+                    outcomes.Add(CollectionOutcome.Failed($"Instance:{inst.InstanceId}:ModInspection", ex));
                 }
             }
 
-            // Deduplicate JAR paths
-            modJars = modJars.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            modJars = modJars.DistinctBy(x => x.Path, StringComparer.OrdinalIgnoreCase).ToList();
 
             var modsWithVerification = new List<(DiscoveredMod Mod, ModVerificationResult Verification)>();
 
             for (int i = 0; i < modJars.Count; i++)
             {
                 ct.ThrowIfCancellationRequested();
-                string jarPath = modJars[i];
+                string jarPath = modJars[i].Path;
+                string instanceId = modJars[i].Instance.InstanceId;
+                var instanceInfo = instanceById[instanceId];
                 string fileName = Path.GetFileName(jarPath);
 
                 update.CurrentAction = $"Inspecting mod ({i + 1}/{modJars.Count}): {fileName}";
@@ -334,6 +355,8 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
 
                 var modItem = new DiscoveredModItem
                 {
+                    MinecraftInstanceId = instanceId,
+                    MinecraftInstanceName = instanceInfo.Name,
                     Name = !string.IsNullOrWhiteSpace(meta.ModName) ? meta.ModName : (!string.IsNullOrWhiteSpace(meta.ModId) ? meta.ModId : Path.GetFileNameWithoutExtension(fileName)),
                     FileName = fileName,
                     FullPath = jarPath,
@@ -386,6 +409,8 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
                             : "Known cheat client filename pattern found in active Minecraft profile mods folder. Content not verified.",
                         PolicyViolationScope = polEval.Policy == GameplayPolicy.PROHIBITED_POSSESSION ? "PROHIBITED_POSSESSION" : string.Empty,
                         EvidenceSource = "ModFolder",
+                        MinecraftInstanceId = instanceId,
+                        MinecraftInstanceName = instanceInfo.Name,
                         FilePath = jarPath,
                         FileSha256 = hashResult.Sha256,
                         FileSizeBytes = hashResult.FileSizeBytes,
@@ -425,6 +450,8 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
                         SoftwareStateDescription = "Archive contains internal classes matching known cheat package.",
                         PolicyViolationScope = "PROHIBITED_POSSESSION",
                         EvidenceSource = "JAR Archive Bytecode",
+                        MinecraftInstanceId = instanceId,
+                        MinecraftInstanceName = instanceInfo.Name,
                         FilePath = jarPath,
                         FileSha256 = hashResult.Sha256,
                         FileSizeBytes = hashResult.FileSizeBytes,
@@ -459,6 +486,8 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
                         SoftwareStateDescription = $"Mod is installed in active profile mods folder under {activePolicy.Gamemode} ruleset.",
                         PolicyViolationScope = polEval.Policy.ToString(),
                         EvidenceSource = "ModPolicyEngine",
+                        MinecraftInstanceId = instanceId,
+                        MinecraftInstanceName = instanceInfo.Name,
                         FilePath = jarPath,
                         FileSha256 = hashResult.Sha256,
                         FileSizeBytes = hashResult.FileSizeBytes,
@@ -494,6 +523,8 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
                         SoftwareStateDescription = "Mod archive contains constant pool bytecode references for automated combat, crystal placement, or packet manipulation.",
                         PolicyViolationScope = "NEEDS_REVIEW",
                         EvidenceSource = "StaticBytecodeAnalyzer",
+                        MinecraftInstanceId = instanceId,
+                        MinecraftInstanceName = instanceInfo.Name,
                         FilePath = jarPath,
                         FileSha256 = hashResult.Sha256,
                         FileSizeBytes = hashResult.FileSizeBytes,
@@ -528,6 +559,8 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
                     Confidence = isAuthentic ? ConfidenceLevel.Certain : ConfidenceLevel.High,
                     DetectionMethod = isAuthentic ? DetectionMethod.HashMatch : DetectionMethod.MetadataRule,
                     EvidenceSource = lookalike.EvidenceSource,
+                    MinecraftInstanceId = modJars.FirstOrDefault(x => x.Path.Equals(lookalike.FilePath, StringComparison.OrdinalIgnoreCase)).Instance?.InstanceId,
+                    MinecraftInstanceName = modJars.FirstOrDefault(x => x.Path.Equals(lookalike.FilePath, StringComparison.OrdinalIgnoreCase)).Instance?.Name,
                     FilePath = lookalike.FilePath,
                     FileSha256 = lookalike.FileSha256,
                     IsInScanWindow = false,
@@ -589,6 +622,7 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
                     ParentProcessId = proc.ParentProcessId,
                     ParentProcessName = proc.ParentProcessName,
                     SanitizedCommandLine = proc.RedactedCommandLine,
+                    Architecture = proc.Architecture,
                     StartTime = proc.StartTime.HasValue ? new DateTimeOffset(proc.StartTime.Value) : null,
                     CollectionTimeUtc = proc.CollectionTimeUtc,
                     ModuleStatus = proc.ModuleEnumerationStatus,
@@ -623,6 +657,11 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
                             Sha256 = mod.Sha256,
                             FileSizeBytes = mod.FileSizeBytes,
                             CollectionTimeUtc = mod.CollectionTimeUtc,
+                            LastWriteTimeUtc = mod.LastWriteTimeUtc,
+                            IsSigned = mod.IsSigned,
+                            IsTrustedSignature = mod.IsTrustedSignature,
+                            SignerSubject = mod.SignerSubject,
+                            TrustStatusExplanation = mod.TrustStatusExplanation,
                             EnumerationStatus = mod.ModuleEnumerationStatus,
                             EnumerationNote = mod.ModuleEnumerationNote,
                             IsInTempDirectory = mod.IsSuspiciousLocation,
@@ -1267,15 +1306,24 @@ public class StandaloneScannerEngine : IStandaloneScannerEngine
             (f.Classification == FindingClassification.ConfirmedCheatArtifact || f.Severity >= Severity.Medium) &&
             (f.EvidenceCategory == EvidenceCategory.Disk || f.EvidenceCategory == EvidenceCategory.Historical || f.EvidenceCategory == EvidenceCategory.FileDeletion));
 
-        bool hasUnavailableRequiredTelemetry = (report.SummaryCounts.IncompleteOrFailedChecks > 0 &&
-            report.DiagnosticChecks.Any(c => (c.CheckId == "CHK-PROCESS-MODULES" || c.CheckId == "CHK-FILE-DISCOVERY" || c.CheckId == "CHK-EVIDENCE-GRAPH") &&
-                                            (c.Status == CheckStatus.UNAVAILABLE || c.Status == CheckStatus.ERROR))) ||
-            report.CollectionOutcomes.Any(o => (o.CollectorName == "ProcessScanner" || o.CollectorName == "FileDiscoveryScanner") &&
-                                               (o.Status == CollectionStatus.Unavailable ||
-                                                o.Status == CollectionStatus.PermissionDenied ||
-                                                o.Status == CollectionStatus.Timeout ||
-                                                o.Status == CollectionStatus.Error)) ||
-            report.RunningProcesses.Any(p => p.ModuleStatus == ModuleEnumerationStatus.AccessDenied || p.ModuleStatus == ModuleEnumerationStatus.UnsupportedArchitecture) ||
+        var requiredCheckIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "CHK-INSTALLATIONS",
+            "CHK-MOD-INVENTORY",
+            "CHK-PROCESS-MODULES",
+            "CHK-FILE-DISCOVERY",
+            "CHK-EVIDENCE-GRAPH"
+        };
+
+        bool hasUnavailableRequiredTelemetry =
+            report.DiagnosticChecks.Any(c => requiredCheckIds.Contains(c.CheckId) && c.Status != CheckStatus.PASSED) ||
+            report.CollectionOutcomes.Any(o =>
+                (o.CollectorName is "InstallationLocator" or "ModInspection" or "ProcessScanner" or "FileDiscoveryScanner") &&
+                o.Status is not (CollectionStatus.Success or CollectionStatus.PartialSuccess)) ||
+            report.CollectionOutcomes.Any(o =>
+                (o.CollectorName is "InstallationLocator" or "ModInspection" or "ProcessScanner" or "FileDiscoveryScanner") &&
+                o.Status == CollectionStatus.PartialSuccess) ||
+            report.RunningProcesses.Any(p => p.ModuleStatus != ModuleEnumerationStatus.Complete) ||
             report.DiagnosticChecks.Any(c => c.CheckId == "CHK-EVIDENCE-GRAPH" && (c.Status == CheckStatus.FLAGGED || c.Status == CheckStatus.ERROR)) ||
             (report.EvidenceGraph == null || !report.EvidenceGraph.IsValid || report.EvidenceGraph.IsResourceBounded);
 

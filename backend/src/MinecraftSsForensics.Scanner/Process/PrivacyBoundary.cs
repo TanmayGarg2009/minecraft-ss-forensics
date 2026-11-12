@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.RegularExpressions;
 using MinecraftSsForensics.Scanner.Models;
 
@@ -61,6 +62,10 @@ public static class PrivacyBoundary
         @"(/Users/)[^/]+(/)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    private static readonly Regex ProcessHostIdentityRegex = new(
+        @"(?<=proc:)[^:]+(?=:\d+:)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     /// <summary>
     /// General string sanitizer redacting credentials, tokens, and personal user paths.
     /// </summary>
@@ -116,6 +121,7 @@ public static class PrivacyBoundary
         redacted = WindowsUserPathEscapedRegex.Replace(redacted, "${1}[REDACTED_USER]${2}");
         redacted = UnixUserPathRegex.Replace(redacted, "${1}[REDACTED_USER]${2}");
         redacted = MacUserPathRegex.Replace(redacted, "${1}[REDACTED_USER]${2}");
+        redacted = ProcessHostIdentityRegex.Replace(redacted, "[REDACTED_HOST]");
 
         return redacted;
     }
@@ -155,9 +161,20 @@ public static class PrivacyBoundary
     {
         if (report == null) return;
 
+        // Redact direct system identity fields instead of exporting personal host/account names.
+        report.TargetSystem.MachineIdentifier = "[REDACTED_HOST]";
+        report.TargetSystem.UserIdentifier = "[REDACTED_USER]";
+
+        // 1. Sanitize runtime metadata
+        report.JavaRuntime.JavaExecutablePath = RedactString(report.JavaRuntime.JavaExecutablePath);
+        report.JavaRuntime.RawJvmArguments = RedactCommandLine(report.JavaRuntime.RawJvmArguments);
+        report.JavaRuntime.JavaHome = RedactString(report.JavaRuntime.JavaHome);
+
         // 1. Sanitize running processes
         foreach (var proc in report.RunningProcesses)
         {
+            proc.ProcessInstanceId = RedactString(proc.ProcessInstanceId);
+            proc.ParentProcessName = RedactString(proc.ParentProcessName);
             if (!string.IsNullOrEmpty(proc.SanitizedCommandLine))
             {
                 proc.SanitizedCommandLine = RedactCommandLine(proc.SanitizedCommandLine);
@@ -171,6 +188,8 @@ public static class PrivacyBoundary
         // 2. Sanitize loaded modules
         foreach (var mod in report.LoadedModules)
         {
+            mod.ProcessInstanceId = RedactString(mod.ProcessInstanceId);
+            mod.ModuleInstanceId = RedactString(mod.ModuleInstanceId);
             if (!string.IsNullOrEmpty(mod.ModulePath))
             {
                 mod.ModulePath = RedactPath(mod.ModulePath);
@@ -206,6 +225,14 @@ public static class PrivacyBoundary
             {
                 finding.ProcessCommandLine = RedactCommandLine(finding.ProcessCommandLine);
             }
+            finding.ProcessName = RedactString(finding.ProcessName);
+            finding.TargetProcessName = RedactString(finding.TargetProcessName);
+            finding.EvidenceSource = RedactString(finding.EvidenceSource);
+            finding.Interpretation = RedactString(finding.Interpretation);
+            finding.WhatIsProven = RedactString(finding.WhatIsProven);
+            finding.WhatIsNotProven = RedactString(finding.WhatIsNotProven);
+            finding.AlternativeLegitimateExplanations = RedactString(finding.AlternativeLegitimateExplanations);
+            finding.Limitations = RedactString(finding.Limitations);
             if (!string.IsNullOrEmpty(finding.TechnicalExplanation))
             {
                 finding.TechnicalExplanation = RedactCommandLine(finding.TechnicalExplanation);
@@ -224,32 +251,100 @@ public static class PrivacyBoundary
         // 7. Sanitize execution history
         foreach (var hist in report.ExecutionHistory)
         {
+            hist.Details = RedactString(hist.Details);
+            hist.ParseFailureReason = RedactString(hist.ParseFailureReason);
             if (!string.IsNullOrEmpty(hist.ApplicationPath))
             {
                 hist.ApplicationPath = RedactPath(hist.ApplicationPath);
             }
         }
 
-        // 8. Sanitize Evidence Graph
+        // 8. Sanitize evidence references, correlation explanations, and collected service paths.
+        foreach (var evidence in report.EvidenceItems)
+        {
+            evidence.FilePath = RedactString(evidence.FilePath);
+            evidence.SourceArtifact = RedactString(evidence.SourceArtifact);
+            evidence.ProcessIdentity = RedactString(evidence.ProcessIdentity);
+            evidence.Description = RedactString(evidence.Description);
+            evidence.Title = RedactString(evidence.Title);
+            evidence.Limitations = RedactString(evidence.Limitations);
+        }
+
+        foreach (var assessment in report.CorrelatedAssessments)
+        {
+            assessment.SoftwareName = RedactString(assessment.SoftwareName);
+            assessment.FilePath = RedactString(assessment.FilePath);
+            assessment.StateDescription = RedactString(assessment.StateDescription);
+            assessment.PolicyEvaluationExplanation = RedactString(assessment.PolicyEvaluationExplanation);
+            assessment.WhatIsProven = RedactString(assessment.WhatIsProven);
+            assessment.WhatIsNotProven = RedactString(assessment.WhatIsNotProven);
+        }
+
+        foreach (var service in report.ServicesAndDrivers)
+        {
+            service.ImagePath = RedactString(service.ImagePath);
+            service.Name = RedactString(service.Name);
+            service.DisplayName = RedactString(service.DisplayName);
+        }
+
+        // 9. Rebuild graph indices after redacting entity identifiers and all path-bearing properties.
         if (report.EvidenceGraph != null)
         {
-            foreach (var node in report.EvidenceGraph.Nodes)
+            var original = report.EvidenceGraph;
+            var sanitizedGraph = new MinecraftSsForensics.Scanner.Graph.EvidenceGraph
             {
-                var keysToUpdate = new List<string>();
-                foreach (var (k, v) in node.Properties)
-                {
-                    if (k.Contains("Path", StringComparison.OrdinalIgnoreCase) ||
-                        k.Contains("CommandLine", StringComparison.OrdinalIgnoreCase))
-                    {
-                        keysToUpdate.Add(k);
-                    }
-                }
+                IsCaptured = original.IsCaptured,
+                IsResourceBounded = original.IsResourceBounded,
+                IsValid = original.IsValid,
+                ValidationErrors = new List<string>(original.ValidationErrors.Select(RedactString))
+            };
+            var idMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            int collisionIndex = 0;
 
-                foreach (var k in keysToUpdate)
+            foreach (var node in original.Nodes)
+            {
+                string safeId = RedactString(node.EntityId);
+                if (idMap.Values.Contains(safeId, StringComparer.OrdinalIgnoreCase))
+                    safeId = $"{safeId}:redacted-{++collisionIndex}";
+                idMap[node.EntityId] = safeId;
+
+                var safeNode = new MinecraftSsForensics.Scanner.Graph.GraphEntity
                 {
-                    node.Properties[k] = RedactString(node.Properties[k]);
-                }
+                    EntityId = safeId,
+                    Type = node.Type,
+                    FirstObservedUtc = node.FirstObservedUtc,
+                    LastObservedUtc = node.LastObservedUtc,
+                    ProvenanceSources = node.ProvenanceSources.Select(RedactString).ToList(),
+                    Properties = node.Properties.ToDictionary(
+                        pair => RedactString(pair.Key),
+                        pair => RedactString(pair.Value),
+                        StringComparer.OrdinalIgnoreCase)
+                };
+                sanitizedGraph.AddNode(safeNode);
             }
+
+            foreach (var edge in original.Edges)
+            {
+                if (!idMap.TryGetValue(edge.SourceEntityId, out var sourceId) ||
+                    !idMap.TryGetValue(edge.TargetEntityId, out var targetId))
+                    continue;
+
+                sanitizedGraph.AddEdge(new MinecraftSsForensics.Scanner.Graph.GraphEdge
+                {
+                    EdgeId = RedactString(edge.EdgeId),
+                    SourceEntityId = sourceId,
+                    TargetEntityId = targetId,
+                    Type = edge.Type,
+                    Confidence = edge.Confidence,
+                    Provenance = RedactString(edge.Provenance),
+                    AssertedRelationship = RedactString(edge.AssertedRelationship),
+                    Limitations = RedactString(edge.Limitations),
+                    CreatedAtUtc = edge.CreatedAtUtc
+                });
+            }
+
+            sanitizedGraph.Validate(out _);
+            report.EvidenceGraph = sanitizedGraph;
         }
     }
 }

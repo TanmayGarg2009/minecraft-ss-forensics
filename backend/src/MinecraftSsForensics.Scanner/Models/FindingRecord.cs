@@ -83,6 +83,8 @@ public class FindingRecord
 
     // Artifact and target process locations
     public string EvidenceSource { get; set; } = string.Empty;
+    public string? MinecraftInstanceId { get; set; }
+    public string? MinecraftInstanceName { get; set; }
     public string? FilePath { get; set; }
     public string? FileOrModulePath { get => FilePath; set => FilePath = value; }
     public long? FileSizeBytes { get; set; }

@@ -47,15 +47,15 @@ sequenceDiagram
 
 ### A. Dedicated Applications & CLI Modes
 - **Player Scanner (`MinecraftSsForensics.exe`)**: Guided graphical interface with explicit consent scopes, gamemode policy selection, real-time progress updates, and multi-format report exports.
-- **Headless CLI Scanner (`MinecraftSsForensics.exe scan`)**: Automated non-interactive console mode supporting scriptable headless execution in tournament and screenshare scenarios.
+- **Headless CLI Scanner (`MinecraftSsForensics.exe scan --consent`)**: Non-interactive local scan mode. Explicit `--consent` acknowledgement is required; network verification is disabled in CLI mode.
 - **Dedicated Staff Viewer (`MinecraftSsForensics.Viewer.exe`)**: Standalone forensic workstation with automatic cryptographic seal verification, multi-axis search and filtering, deep evidence correlation viewers, and instant HTML/CSV/Markdown export.
 
-### B. Evidentiary Standards & 8 Correlated Software States
+### B. Evidentiary Standards & Distinct Evidence States
 Never collapses evidence into a simplistic "cheating detected" flag. Strictly distinguishes:
 1. `SoftwarePresent`: File located in user staging folders (`Downloads`, `Desktop`, `$Recycle.Bin`).
 2. `SoftwareInstalled`: Mod located in the active profile's `mods/` directory.
 3. `SoftwareExecuted`: Recorded in Windows Prefetch, BAM/DAM, or UserAssist execution history.
-4. `SoftwareActiveDuringSession`: Recorded running simultaneously with an active `javaw.exe` process.
+4. `SoftwareActiveDuringSession`: Supported temporal and technical association to an identified Minecraft process/session; mere concurrent execution is not enough.
 5. `SoftwareInteractingWithMinecraft`: Unsigned module mapped into game process address space.
 6. `ProhibitedFunctionalityUsed`: Corroborated in-game feature or packet automation.
 7. `SoftwareContainsProhibitedCapabilities`: Bytecode contains Robot / cursor / crystal APIs.
@@ -70,13 +70,13 @@ Configurable server gamemode policies evaluate findings under distinct enforceme
 
 ### D. Native Win32 P/Invoke & Deep System Inspection
 - **Process Working Directory Resolution**: Reads remote `PEB.ProcessParameters.CurrentDirectory` via `NtQueryInformationProcess` to establish true Minecraft working directories.
-- **Reflective Memory Injection Detection**: Audits unbacked private executable memory pages (`MEM_COMMIT | MEM_PRIVATE | PAGE_EXECUTE_READWRITE`) while strictly distinguishing true native PE headers (`MZ`) from benign JVM HotSpot JIT code cache.
+- **Read-only memory indicator**: Attempts bounded inspection of unbacked private executable memory regions for an `MZ` header. This is a heuristic indicator, not comprehensive reflective-injection detection; it may miss erased/relocated PE headers and cannot establish intent.
 - **Authenticode Verification (`WinVerifyTrust`)**: Validates embedded PKCS#7 and catalog digital signatures using `WINTRUST_ACTION_GENERIC_VERIFY_V2`.
-- **Windows Prefetch Decompression (`RtlDecompressBufferEx`)**: Decompresses native Windows 10/11 MAM-compressed `.pf` files, extracting run counts, timestamps, and loaded DLLs.
+- **Windows Prefetch**: Parses supported Prefetch records and attempts XPRESS-HUFF decompression where available. Collection may be unavailable or partial due to permissions, OS configuration, compression variants, or malformed records; it is not an exhaustive execution log.
 - **NTFS ADS Provenance**: Parses `:Zone.Identifier` alternate data streams to verify original download URLs and domains (Modrinth, CurseForge, Discord, GitHub, or file lockers).
 - **Concealed Attribute Detection**: Flags executable and archive files in user staging directories marked with `Hidden` or `System` attributes.
 - **Unicode Evasion Normalization**: Converts full-width homoglyphs (`0xFF01..0xFF5E`) to standard ASCII to defeat visual string evasion in cheat filenames and packages.
-- **BAM Device Path Translation (`QueryDosDevice`)**: Maps NT volume paths (`\Device\HarddiskVolumeX`) to standard DOS drive letters (`C:\`, `D:\`).
+- **BAM path handling**: Collects supported BAM records and attempts volume-path normalization where supported; unavailable paths remain unresolved and are not treated as proof of deletion.
 - **Recycle Bin Reconstruction**: Parses Version 1 and Version 2 `$I` index headers, recovering deleted filenames, deletion timestamps, and paired `$R` file hashes.
 - **Chromium History Reading**: Sandboxed SQLite parser extracting domain visit timestamps using real WebKit microsecond conversion without timestamp fabrication.
 
@@ -120,15 +120,17 @@ Run in Windows PowerShell (Administrator recommended for full prefetch access):
 *(Notice: Never pipes remote scripts into `iex`. Downloads the binary, verifies the SHA-256 hash against the published release manifest, and launches safely).*
 
 ### Option B: Headless CLI Scanner
-For automated, scriptable, or tournament operations:
-```cmd
-MinecraftSsForensics.exe scan --output C:\SS_Reports --mode FULL --gamemode "Crystal PvP" --format all
+For a local scan and reports in all supported formats:
+```powershell
+& ".\release\win-x64\MinecraftSsForensics.exe" scan --consent --output "$env:USERPROFILE\Documents\SS_Reports" --mode FULL --gamemode "Crystal PvP" --format all
 ```
+
+The required `--consent` flag acknowledges that the CLI will collect the configured process/module, Minecraft mod, execution-artifact, registry, USB-storage, service/driver and bounded file-discovery data locally. Browser history remains excluded unless `--browser` is also supplied. Online mod verification is disabled in CLI mode. Exit codes: `0` no prohibited indicators within inspected coverage, `1` execution/export error, `2` invalid arguments or suspicious/inconclusive assessment.
 
 #### CLI Command Reference:
 | Option | Shorthand | Description | Default |
 | :--- | :--- | :--- | :--- |
-| `--output <dir>` | `-o` | Output directory for report files | `./reports` |
+| `--consent` | | Required acknowledgement of the CLI collection scope | Required |
 | `--mode <QUICK\|FULL>` | `-m` | Scan mode depth | `FULL` |
 | `--gamemode <name>` | `-g` | Gamemode policy (`Crystal PvP`, `Sword PvP`, `UHC`, `Default`) | `Crystal PvP` |
 | `--dir <path>` | `-d` | Custom Minecraft installation path | Auto-detected |
@@ -169,10 +171,10 @@ $env:DOTNET_ROOT = "$env:USERPROFILE\.dotnet"; $env:PATH = "$env:DOTNET_ROOT;$en
 dotnet build backend/MinecraftSsForensics.sln -c Release
 ```
 
-### Run Automated Forensic Test Suite (196 Tests)
+### Run Automated Forensic Test Suite
 ```powershell
 $env:DOTNET_ROOT = "$env:USERPROFILE\.dotnet"; $env:PATH = "$env:DOTNET_ROOT;$env:PATH"
-dotnet test backend/MinecraftSsForensics.sln -c Release
+dotnet test backend/MinecraftSsForensics.sln -c Release -m:1
 ```
 
 ### Automated Release Pipeline
@@ -182,6 +184,10 @@ dotnet test backend/MinecraftSsForensics.sln -c Release
 
 ---
 
-## 7. License
+## 7. Detection boundaries
+
+A running Java process is treated as Minecraft only when its name is a supported Minecraft client or its command line contains a recognized Minecraft client/loader launch marker. Generic Java servers and unrelated Java applications are not assumed to be Minecraft. Loaded module enumeration and read-only memory inspection depend on Windows access rights and process architecture; unknown or unsigned DLLs alone are not proof of injection or cheating. Historical artifacts are best-effort sources, not exhaustive logs. Minecraft mods are inventoried and classified separately from proof that a mod loaded during a specific match.
+
+## 8. License
 
 Distributed under the [MIT License](LICENSE).

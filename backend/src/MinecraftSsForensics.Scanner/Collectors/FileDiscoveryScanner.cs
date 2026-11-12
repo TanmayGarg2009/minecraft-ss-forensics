@@ -61,7 +61,14 @@ public class FileDiscoveryScanner
             {
                 ScanDirectoryRecursive(folder, items, findings, currentDepth: 0, maxDepth: 2);
             }
-            catch { /* Permission boundaries */ }
+            catch (UnauthorizedAccessException)
+            {
+                // A denied root is not equivalent to an empty scan result.
+            }
+            catch (IOException)
+            {
+                // Continue with other roots if a filesystem entry changes during collection.
+            }
         }
 
         // Check Recycle Bin across all fixed drives
@@ -235,7 +242,14 @@ public class FileDiscoveryScanner
                 }
             }
         }
-        catch { /* Non-fatal directory access restriction */ }
+        catch (UnauthorizedAccessException)
+        {
+            // Keep scanning other roots after a denied subtree.
+        }
+        catch (IOException)
+        {
+            // Directory contents can change during collection.
+        }
     }
 
     private void ScanRecycleBin(List<DiscoveredFileItem> items, List<FindingRecord> findings)

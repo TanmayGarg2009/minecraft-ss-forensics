@@ -191,12 +191,7 @@ public class GraphSerializationBridge
 
             procMap[procId] = proc;
 
-            bool isGameProc = proc.ProcessName.Contains("javaw", StringComparison.OrdinalIgnoreCase) ||
-                              proc.ProcessName.Contains("minecraft", StringComparison.OrdinalIgnoreCase) ||
-                              (!string.IsNullOrEmpty(proc.SanitizedCommandLine) &&
-                               (proc.SanitizedCommandLine.Contains("net.minecraft", StringComparison.OrdinalIgnoreCase) ||
-                                proc.SanitizedCommandLine.Contains("fabric", StringComparison.OrdinalIgnoreCase) ||
-                                proc.SanitizedCommandLine.Contains("forge", StringComparison.OrdinalIgnoreCase)));
+            bool isGameProc = MinecraftSsForensics.Scanner.Process.MinecraftProcessClassifier.IsMinecraftProcess(proc.ProcessName, proc.SanitizedCommandLine);
 
             if (isGameProc)
             {

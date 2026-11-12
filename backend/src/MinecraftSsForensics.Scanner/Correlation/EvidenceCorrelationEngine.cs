@@ -7,6 +7,7 @@ using MinecraftSsForensics.Scanner.Cheats;
 using MinecraftSsForensics.Scanner.Models;
 using MinecraftSsForensics.Scanner.Policy;
 using MinecraftSsForensics.Scanner.Graph;
+using MinecraftSsForensics.Scanner.Process;
 
 namespace MinecraftSsForensics.Scanner.Correlation;
 
@@ -68,12 +69,7 @@ public class EvidenceCorrelationEngine
 
         // Identify active Minecraft game processes specifically
         var activeGameProcesses = report.RunningProcesses
-            .Where(p => p.ProcessName.Contains("javaw", StringComparison.OrdinalIgnoreCase) ||
-                        p.ProcessName.Contains("minecraft", StringComparison.OrdinalIgnoreCase) ||
-                        (!string.IsNullOrEmpty(p.SanitizedCommandLine) &&
-                         (p.SanitizedCommandLine.Contains("net.minecraft", StringComparison.OrdinalIgnoreCase) ||
-                          p.SanitizedCommandLine.Contains("fabric", StringComparison.OrdinalIgnoreCase) ||
-                          p.SanitizedCommandLine.Contains("forge", StringComparison.OrdinalIgnoreCase))))
+            .Where(p => MinecraftProcessClassifier.IsMinecraftProcess(p.ProcessName, p.SanitizedCommandLine))
             .ToList();
 
         // 1. Correlate Mod Inventory Items (Installed)

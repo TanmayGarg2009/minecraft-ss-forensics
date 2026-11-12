@@ -67,7 +67,7 @@ public class ProcessScanner : IProcessScanner
                     ProcessId = proc.Id,
                     ProcessName = proc.ProcessName,
                     CollectionTimeUtc = DateTimeOffset.UtcNow,
-                    IsGameProcess = procName.Equals("javaw") || procName.Equals("java"),
+                    IsGameProcess = false,
                     IsLauncherProcess = !procName.Equals("javaw") && !procName.Equals("java") && isTarget,
                     IsCheatProcess = cheatSig != null,
                     MatchedCheatName = cheatSig?.Name
@@ -92,6 +92,7 @@ public class ProcessScanner : IProcessScanner
                     imageSha256 = TryComputeFileSha256(item.ExecutablePath);
                 }
                 item.ImageSha256 = imageSha256;
+                item.Architecture = TryGetArchitecture(proc);
 
                 string hostId = Environment.MachineName.ToLowerInvariant();
                 var procInstId = ProcessInstanceId.Create(hostId, proc.Id, item.StartTime.HasValue ? new DateTimeOffset(item.StartTime.Value) : null, imageSha256);
@@ -100,6 +101,7 @@ public class ProcessScanner : IProcessScanner
                 // Query command line and parent process
                 var (cmdLine, parentId) = TryGetProcessDetails(proc.Id);
                 item.RedactedCommandLine = cmdLine;
+                item.IsGameProcess = MinecraftProcessClassifier.IsMinecraftProcess(item.ProcessName, cmdLine);
                 item.CurrentWorkingDirectory = TryGetProcessCurrentDirectory(proc.Id);
                 item.ParentProcessId = parentId;
                 if (parentId.HasValue)
@@ -206,6 +208,7 @@ public class ProcessScanner : IProcessScanner
                         {
                             var fileInfo = new FileInfo(path);
                             modInfo.FileSizeBytes = fileInfo.Length;
+                            modInfo.LastWriteTimeUtc = new DateTimeOffset(fileInfo.LastWriteTimeUtc, TimeSpan.Zero);
                         }
                         catch { /* Ignored */ }
 
@@ -382,6 +385,24 @@ public class ProcessScanner : IProcessScanner
             // WMI access denied or not available
         }
         return (null, null);
+    }
+
+    private static string? TryGetArchitecture(System.Diagnostics.Process proc)
+    {
+        if (!OperatingSystem.IsWindows())
+            return RuntimeInformation.ProcessArchitecture.ToString();
+
+        try
+        {
+            if (!IsWow64Process(proc.Handle, out bool isWow64))
+                return null;
+
+            return isWow64 ? "X86" : Environment.Is64BitOperatingSystem ? "X64" : "X86";
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static string? TryExtractJavaVersion(string javaExePath)

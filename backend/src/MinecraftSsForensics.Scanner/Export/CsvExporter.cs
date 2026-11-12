@@ -26,6 +26,7 @@ public static class CsvExporter
         "EvidenceStrength",
         "Confidence",
         "DetectionMethod",
+        "ExecutionState",
         "SoftwareState",
         "SoftwareStateDescription",
         "EvidenceSource",
@@ -33,7 +34,9 @@ public static class CsvExporter
         "FileSha256",
         "FileSizeBytes",
         "ObservedTimestamp",
+        "TimestampReliability",
         "IsInScanWindow",
+        "TargetProcessIdentity",
         "EvidenceClusterId",
         "Interpretation"
     };
@@ -66,6 +69,7 @@ public static class CsvExporter
                     EscapeCsvField(finding.EvidenceStrength.ToString()),
                     EscapeCsvField(finding.Confidence.ToString()),
                     EscapeCsvField(finding.DetectionMethod.ToString()),
+                    EscapeCsvField(finding.ExecutionState.ToString()),
                     EscapeCsvField(finding.SoftwareState.ToString()),
                     EscapeCsvField(finding.SoftwareStateDescription),
                     EscapeCsvField(finding.EvidenceSource),
@@ -73,7 +77,9 @@ public static class CsvExporter
                     EscapeCsvField(finding.FileSha256 ?? string.Empty),
                     EscapeCsvField(finding.FileSizeBytes?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
                     EscapeCsvField(finding.ObservedTimestamp?.ToString("o", CultureInfo.InvariantCulture) ?? string.Empty),
+                    EscapeCsvField(finding.TimestampReliability),
                     EscapeCsvField(finding.IsInScanWindow ? "true" : "false"),
+                    EscapeCsvField(finding.ProcessId?.ToString(CultureInfo.InvariantCulture) ?? string.Empty),
                     EscapeCsvField(finding.EvidenceClusterId),
                     EscapeCsvField(finding.Interpretation)
                 };

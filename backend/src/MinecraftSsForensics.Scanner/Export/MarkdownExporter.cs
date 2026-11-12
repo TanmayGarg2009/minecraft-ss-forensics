@@ -35,7 +35,7 @@ public static class MarkdownExporter
         sb.AppendLine($"- **Duration**: `{report.ScanDurationMs} ms`");
         sb.AppendLine($"- **Active Gamemode Ruleset**: `{report.PolicyEvaluation.AppliedGamemode}`");
         sb.AppendLine($"- **Applied Policy Rulebook**: `{report.PolicyEvaluation.AppliedPolicyName}` (v`{report.PolicyEvaluation.AppliedPolicyVersion}`)");
-        sb.AppendLine($"- **Cryptographic SHA-256 Seal**: `{report.ReportIntegrityHash}`");
+        sb.AppendLine($"- **Cryptographic SHA-256 Seal**: `{report.ReportIntegrityHash}` (detects payload changes; does not authenticate the collector)");
         sb.AppendLine($"- **Player Consent Confirmed**: `{(report.Consent.ConsentGiven ? "YES (Explicit Consent Confirmed)" : "NO")}`");
         sb.AppendLine($"- **Browser History Audit Consented**: `{(report.Consent.InspectBrowserHistory ? "YES" : "NO (Sensitive Category Excluded)")}`");
         sb.AppendLine();
@@ -205,7 +205,7 @@ public static class MarkdownExporter
         sb.AppendLine();
         foreach (var p in report.RunningProcesses)
         {
-            sb.AppendLine($"- **PID {p.ProcessId}**: `{p.ProcessName}` (Path: `{p.ExecutablePath}`, Started: `{p.StartTime}`)");
+            sb.AppendLine($"- **PID {p.ProcessId}**: `{p.ProcessName}` (Path: `{p.ExecutablePath}`, Started: `{p.StartTime}`, Process instance: `{p.ProcessInstanceId}`, architecture: `{p.Architecture}`, module status: `{p.ModuleStatus}`)");
         }
         sb.AppendLine();
 
@@ -222,8 +222,19 @@ public static class MarkdownExporter
         }
         sb.AppendLine();
 
-        // 11. Collection Diagnostics
-        sb.AppendLine("## 11. Diagnostic Checks and Technical Limitations");
+        // 11. Collection Outcomes and Diagnostics
+        sb.AppendLine("## 11. Collection Outcomes, Diagnostic Checks, and Technical Limitations");
+        sb.AppendLine();
+        sb.AppendLine("| Collector | Status | Items | Duration | Reason |");
+        sb.AppendLine("| :--- | :--- | :---: | :---: | :--- |");
+        foreach (var outcome in report.CollectionOutcomes)
+        {
+            sb.AppendLine($"| `{CleanCell(outcome.CollectorName)}` | `{outcome.Status}` | {outcome.ItemsCollected} | {outcome.Duration.TotalMilliseconds:F0} ms | {CleanCell(outcome.Reason)} |");
+        }
+        sb.AppendLine();
+        sb.AppendLine("A missing or denied source is not proof of deletion or tampering. A success with zero matching items is not an exhaustive clean-system conclusion.");
+        sb.AppendLine();
+        sb.AppendLine("### Diagnostic Checks");
         sb.AppendLine();
         sb.AppendLine("| Check Name | Source | Status | Details |");
         sb.AppendLine("| :--- | :--- | :--- | :--- |");

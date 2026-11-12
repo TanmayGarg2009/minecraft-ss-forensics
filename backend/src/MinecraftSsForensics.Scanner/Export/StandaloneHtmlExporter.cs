@@ -63,10 +63,17 @@ public static class StandaloneHtmlExporter
         sb.AppendLine($"        <div class=\"meta-item\"><span class=\"meta-label\">ACTIVE RULESET</span><span class=\"meta-val font-bold text-sky\">{E(report.PolicyEvaluation.AppliedGamemode)}</span></div>");
         sb.AppendLine("      </div>");
         sb.AppendLine($"      <div class=\"seal-banner\">🔒 Cryptographic SHA-256 Seal: <code class=\"font-mono\">{E(report.ReportIntegrityHash)}</code></div>");
+        if (report.CollectionOutcomes.Count > 0)
+        {
+            sb.AppendLine("      <p class=\"section-desc\">Collector coverage is recorded below. A SHA-256 hash detects report changes but does not authenticate who collected or authored the report.</p>");
+        }
         sb.AppendLine("    </section>");
 
         // Verdict Banner
-        string verdictClass = report.SummaryCounts.Critical > 0 || report.SummaryCounts.ConfirmedCheats > 0 ? "verdict-critical" :
+        bool incompleteCoverage = report.SummaryCounts.IncompleteOrFailedChecks > 0 ||
+                                  report.CollectionOutcomes.Any(o => o.Status is not (MinecraftSsForensics.Scanner.Observations.CollectionStatus.Success or MinecraftSsForensics.Scanner.Observations.CollectionStatus.PartialSuccess));
+        string verdictClass = incompleteCoverage || report.Verdict.OverallAssessment == InvestigationVerdict.InconclusiveTelemetry ? "verdict-suspicious" :
+                              report.SummaryCounts.Critical > 0 || report.SummaryCounts.ConfirmedCheats > 0 ? "verdict-critical" :
                               report.SummaryCounts.High > 0 || report.SummaryCounts.StrongIndicators > 0 ? "verdict-warning" :
                               report.SummaryCounts.Medium > 0 || report.SummaryCounts.Suspicious > 0 ? "verdict-suspicious" : "verdict-clean";
         sb.AppendLine($"    <section class=\"card verdict-card {verdictClass}\">");
@@ -439,7 +446,18 @@ public static class StandaloneHtmlExporter
         // ---------------- TAB 7: DIAGNOSTICS ----------------
         sb.AppendLine("    <div id=\"tab-diagnostics\" class=\"tab-content\">");
         sb.AppendLine("      <div class=\"card\">");
-        sb.AppendLine("        <h3 class=\"section-title\">Collection Diagnostic Checks</h3>");
+        sb.AppendLine("        <h3 class=\"section-title\">Collection Coverage &amp; Collector Outcomes</h3>");
+        sb.AppendLine("        <table class=\"data-table\">");
+        sb.AppendLine("          <thead><tr><th>Collector</th><th>Status</th><th>Items</th><th>Duration</th><th>Reason</th></tr></thead>");
+        sb.AppendLine("          <tbody>");
+        foreach (var outcome in report.CollectionOutcomes)
+        {
+            string statusClass = outcome.Status == MinecraftSsForensics.Scanner.Observations.CollectionStatus.Success ? "badge-emerald" : "badge-amber";
+            sb.AppendLine($"            <tr><td><strong>{E(outcome.CollectorName)}</strong></td><td><span class=\"badge {statusClass}\">{outcome.Status}</span></td><td>{outcome.ItemsCollected}</td><td>{outcome.Duration.TotalMilliseconds:F0} ms</td><td>{E(outcome.Reason)}</td></tr>");
+        }
+        sb.AppendLine("          </tbody>");
+        sb.AppendLine("        </table>");
+        sb.AppendLine("        <h3 class=\"section-title mt-4\">Collection Diagnostic Checks</h3>");
         sb.AppendLine("        <table class=\"data-table\">");
         sb.AppendLine("          <thead><tr><th>Check Name</th><th>Source</th><th>Status</th><th>Reason / Details</th></tr></thead>");
         sb.AppendLine("          <tbody>");

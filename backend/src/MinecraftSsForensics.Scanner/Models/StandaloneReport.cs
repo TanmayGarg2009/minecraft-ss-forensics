@@ -107,7 +107,10 @@ public class StandaloneReport
     [JsonIgnore]
     public List<IObservation> RawObservations { get; set; } = new();
 
-    [JsonIgnore]
+    /// <summary>
+    /// Per-collector coverage and failure status included in portable exports so reviewers can
+    /// distinguish a completed empty collection from unavailable or excluded telemetry.
+    /// </summary>
     public List<CollectionOutcome> CollectionOutcomes { get; set; } = new();
 
     /// <summary>
@@ -166,10 +169,24 @@ public class TargetSystemInfo
 
 public class MinecraftInstallationInfo
 {
+    public string InstanceId { get; set; } = string.Empty;
+    public int FindingsCount { get; set; }
+    public int ModsInspected { get; set; }
     public string Name { get; set; } = string.Empty;
-    public string RootPath { get; set; } = string.Empty;
-    public bool Exists { get; set; }
     public string LauncherType { get; set; } = string.Empty;
+    public string RootPath { get; set; } = string.Empty;
+    public string ModsPath { get; set; } = string.Empty;
+    public string ConfigPath { get; set; } = string.Empty;
+    public string LogsPath { get; set; } = string.Empty;
+    public string? GameVersion { get; set; }
+    public string? Loader { get; set; }
+    public string? LoaderVersion { get; set; }
+    public string DiscoverySource { get; set; } = string.Empty;
+    public string DiscoveryConfidence { get; set; } = "Medium";
+    public bool Exists { get; set; }
+    public bool IsAccessible { get; set; }
+    public string? AvailabilityNote { get; set; }
+    public string InspectionStatus { get; set; } = "Pending";
 }
 
 public class JavaRuntimeInfo
@@ -184,6 +201,8 @@ public class JavaRuntimeInfo
 
 public class DiscoveredModItem
 {
+    public string MinecraftInstanceId { get; set; } = string.Empty;
+    public string MinecraftInstanceName { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string FileName { get; set; } = string.Empty;
     public string FullPath { get; set; } = string.Empty;
@@ -238,6 +257,7 @@ public class CheatDetectionItem
 public class ProcessTelemetryItem
 {
     public int ProcessId { get; set; }
+    public string? MinecraftInstanceId { get; set; }
     public string ProcessName { get; set; } = string.Empty;
     public string? ExecutablePath { get; set; }
     public string? ImageSha256 { get; set; }
@@ -247,6 +267,7 @@ public class ProcessTelemetryItem
     public string? SanitizedCommandLine { get; set; }
     public DateTimeOffset? StartTime { get; set; }
     public DateTimeOffset CollectionTimeUtc { get; set; } = DateTimeOffset.UtcNow;
+    public string? Architecture { get; set; }
     public bool HasStartTime => StartTime.HasValue;
     public ModuleEnumerationStatus ModuleStatus { get; set; } = ModuleEnumerationStatus.Complete;
     public string? ModuleStatusNote { get; set; }
@@ -265,6 +286,11 @@ public class LoadedModuleItem
     public string? Sha256 { get; set; }
     public long? FileSizeBytes { get; set; }
     public DateTimeOffset CollectionTimeUtc { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? LastWriteTimeUtc { get; set; }
+    public bool IsSigned { get; set; }
+    public bool IsTrustedSignature { get; set; }
+    public string? SignerSubject { get; set; }
+    public string? TrustStatusExplanation { get; set; }
     public bool IsInTempDirectory { get; set; }
     public bool IsRecognizedJavaNativeLibrary { get; set; }
     public string ProvenanceAssessment { get; set; } = "Normal System Module";

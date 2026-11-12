@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     private CancellationTokenSource? _scanCts;
     private StandaloneReport? _currentReport;
     private StandaloneReport? _staffReport;
+    private List<FindingRecord> _visibleStaffFindings = new();
     private readonly IStandaloneScannerEngine _engine;
     private readonly ModPolicyRegistry _policyRegistry = new();
 
@@ -388,8 +389,9 @@ public partial class MainWindow : Window
             return true;
         }).ToList();
 
+        _visibleStaffFindings = filtered;
         LstStaffFindings.Items.Clear();
-        foreach (var f in filtered)
+        foreach (var f in _visibleStaffFindings)
         {
             LstStaffFindings.Items.Add($"[{f.Classification.ToString().ToUpperInvariant()}] {f.DetectionName}");
         }
@@ -405,9 +407,9 @@ public partial class MainWindow : Window
         if (_staffReport == null || LstStaffFindings.SelectedIndex < 0) return;
 
         int idx = LstStaffFindings.SelectedIndex;
-        if (idx < _staffReport.Findings.Count)
+        if (idx < _visibleStaffFindings.Count)
         {
-            var f = _staffReport.Findings[idx];
+            var f = _visibleStaffFindings[idx];
             TxtDetailTitle.Text = f.DetectionName;
             TxtDetailMeta.Text = $"Classification: {f.Classification} • Severity: {f.Severity} • Confidence: {f.Confidence} • Source: {f.EvidenceSource}";
             TxtDetailExplanation.Text = f.TechnicalExplanation;

@@ -83,7 +83,7 @@ public class SecurityAndHardeningTests
         Assert.True(success, error);
         Assert.NotNull(importedReport);
         Assert.Equal(report.ReportId, importedReport.ReportId);
-        Assert.Equal(report.ReportIntegrityHash, importedReport.ReportIntegrityHash);
+        Assert.NotEqual(report.ReportIntegrityHash, importedReport.ReportIntegrityHash); // Export seal covers the sanitized copy.
 
         var verifyResult = Integrity.ReportIntegrityValidator.VerifyReportIntegrityDetailed(importedReport);
         Assert.True(verifyResult.IsValid);

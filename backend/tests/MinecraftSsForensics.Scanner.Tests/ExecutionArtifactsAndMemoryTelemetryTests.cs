@@ -256,6 +256,7 @@ public class ExecutionArtifactsAndMemoryTelemetryTests
         {
             ProcessId = 1111,
             ProcessName = "javaw.exe",
+            SanitizedCommandLine = "javaw.exe -cp minecraft.jar net.minecraft.client.main.Main",
             ProcessInstanceId = mcProcInst,
             StartTime = DateTimeOffset.UtcNow.AddMinutes(-30)
         });
@@ -626,6 +627,7 @@ public class ExecutionArtifactsAndMemoryTelemetryTests
         {
             ProcessId = 1111,
             ProcessName = "javaw.exe",
+            SanitizedCommandLine = "javaw.exe -cp minecraft.jar net.minecraft.client.main.Main",
             StartTime = null
         });
 
@@ -666,6 +668,7 @@ public class ExecutionArtifactsAndMemoryTelemetryTests
         {
             ProcessId = 1111,
             ProcessName = "javaw.exe",
+            SanitizedCommandLine = "javaw.exe -cp minecraft.jar net.minecraft.client.main.Main",
             ProcessInstanceId = mcInstId,
             StartTime = mcStart
         });
